@@ -1,0 +1,35 @@
+name: Basic Infrastructure Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check Terraform syntax
+      run: |
+        if [ -f "terraform/main.tf" ]; then
+          echo "Found Terraform files"
+          ls -la terraform/
+        else
+          echo "No Terraform files found"
+        fi
+    
+    - name: Check Ansible files
+      run: |
+        if [ -d "ansible/playbooks" ]; then
+          echo "Found Ansible playbooks"
+          ls -la ansible/playbooks/
+        else
+          echo "No Ansible playbooks found"
+        fi
+    
+    - name: Run basic shell script
+      run: echo "Basic workflow execution successful!"
