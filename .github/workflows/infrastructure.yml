@@ -2,7 +2,7 @@ name: Infrastructure CI/CD
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
