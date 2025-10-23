@@ -20,7 +20,7 @@ jobs:
         terraform_wrapper: false
 
     - name: Setup Ansible
-      uses: ansible/actions/setup@v1
+      uses: ansible/actions/setup@v2
       with:
         ansible-version: '6.7.0'
 
@@ -65,7 +65,7 @@ jobs:
         terraform_wrapper: false
 
     - name: Setup Ansible
-      uses: ansible/actions/setup@v1
+      uses: ansible/actions/setup@v2
       with:
         ansible-version: '6.7.0'
 
