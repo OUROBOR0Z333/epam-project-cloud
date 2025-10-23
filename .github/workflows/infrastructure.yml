@@ -62,14 +62,14 @@ jobs:
     - name: Setup GCP Authentication
       run: |
         # Create a temporary key file from the base64-encoded secret
-        mkdir -p ~/.config/gcloud
-        echo "${{ secrets.GCP_SA_KEY }}" | base64 -d > ~/gcp-key.json
+        mkdir -p $HOME/.config/gcloud
+        echo "${{ secrets.GCP_SA_KEY }}" | base64 -d > $HOME/gcp-key.json
         
         # Set environment variable for Terraform to use the service account key
         echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp-key.json" >> $GITHUB_ENV
         
         # Also authenticate gcloud CLI
-        gcloud auth activate-service-account --key-file=~/gcp-key.json
+        gcloud auth activate-service-account --key-file=$HOME/gcp-key.json
         gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
         gcloud config set compute/region ${{ secrets.GCP_REGION }}
 
