@@ -1,7 +1,0 @@
-environment   = "qa"
-project_name  = "Epam_Cloud_Project"
-region        = "local"
-instance_type = "local_simulation"
-database_name = "local_db"
-database_user = "admin"
-database_password = "password123"
