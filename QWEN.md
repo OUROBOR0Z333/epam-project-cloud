@@ -167,3 +167,4 @@ The dockerized application consists of a three-tier architecture:
 
 To run: ./dockerized-version/scripts/start_docker_app.sh
 To stop: ./dockerized-version/scripts/stop_docker_app.sh
+- Fixed Google Cloud Storage bucket creation issue by correcting project ID mismatch in terraform.tfvars file. The Terraform configuration had an incorrect project ID ("epam-cloud-project-12345") that didn't match the actual GCP project ID ("epamgcpdeployment2"). Created diagnostic scripts to prevent similar issues in the future.

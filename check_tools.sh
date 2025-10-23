@@ -11,172 +11,169 @@ command_exists() {
 # Check for pyenv
 echo -n "Checking for pyenv... "
 if command_exists pyenv; then
-    echo "✓ Installed (Version: $(pyenv --version))"
+    echo "[OK] Installed (Version: $(pyenv --version))"
 else
-    echo "✗ Not installed"
+    echo "[MISSING] Not installed"
 fi
 
 # Check for tfenv
 echo -n "Checking for tfenv... "
 if command_exists tfenv; then
-    echo "✓ Installed (Version: $(tfenv --version))"
+    echo "[OK] Installed (Version: $(tfenv --version))"
 else
-    echo "✗ Not installed"
+    echo "[MISSING] Not installed"
 fi
 
-# Check for Terraform (managed by tfenv)
+# Check for Terraform (should be managed by tfenv)
 echo -n "Checking for Terraform... "
 if command_exists terraform; then
-    # Check if it's managed by tfenv
     TERRAFORM_PATH=$(which terraform)
-    if [[ "$TERRAFORM_PATH" == *"tfenv"* ]]; then
+    if [[ "$TERRAFORM_PATH" == *".tfenv"* ]]; then
         # Try to get the version, handling the case where no version is set
         TERRAFORM_VERSION=$(terraform version 2>&1 | head -n1)
         if [[ "$TERRAFORM_VERSION" == *"Version could not be resolved"* ]]; then
-            echo "⚠️  Installed but no version set (managed by tfenv)"
-            echo "    Available versions: $(tfenv list 2>/dev/null || echo 'none')"
+            echo "[WARNING] Installed but no version set (managed by tfenv)"
         else
-            echo "✓ Installed (Managed by tfenv: $TERRAFORM_VERSION)"
+            echo "[OK] Installed (Managed by tfenv: $TERRAFORM_VERSION)"
         fi
     else
-        TERRAFORM_VERSION=$(terraform version 2>&1 | head -n1)
-        echo "! Installed but not managed by tfenv: $TERRAFORM_VERSION"
+        echo "[WARNING] Installed but not managed by tfenv (direct installation)"
     fi
 else
-    echo "✗ Not installed"
+    echo "[MISSING] Not installed"
 fi
 
 # Check for Ansible
 echo -n "Checking for Ansible... "
 if command_exists ansible; then
-    # Check if it's in a virtual environment
     ANSIBLE_PATH=$(which ansible)
-    if [[ "$ANSIBLE_PATH" == *".pyenv/shims"* ]]; then
-        # Check if a specific ansible environment exists
-        if pyenv versions --bare 2>/dev/null | grep -q "ansible-env"; then
-            # Check if the active environment is ansible-env
-            CURRENT_PYENV=$(pyenv version-name 2>/dev/null)
-            if [[ "$CURRENT_PYENV" == "ansible-env-epam" ]]; then
-                echo "✓ Installed and currently active in ansible-env-epam (Path: $ANSIBLE_PATH)"
-            else
-                echo "✓ Available via pyenv in ansible-env-epam environment (Path: $ANSIBLE_PATH)"
-                echo "  - To activate: pyenv activate ansible-env-epam"
-                echo "  - Currently using: $CURRENT_PYENV"
-            fi
-        else
-            echo "✓ Installed via pyenv (Path: $ANSIBLE_PATH)"
-        fi
-    elif [[ "$ANSIBLE_PATH" == *"venv"* ]] || [[ "$ANSIBLE_PATH" == *"/ansible-env/"* ]] || [[ "$ANSIBLE_PATH" == *".pyenv/versions"* ]]; then
-        echo "✓ Installed in dedicated environment (Path: $ANSIBLE_PATH)"
+    if [[ "$ANSIBLE_PATH" == *".pyenv/shims"* ]] || [[ "$ANSIBLE_PATH" == *".venv"* ]] || [[ "$ANSIBLE_PATH" == *"/ansible-env/"* ]]; then
+        echo "[OK] Installed in a virtual environment"
     else
-        echo "⚠️  Installed but not in dedicated virtual environment (Path: $ANSIBLE_PATH)"
+        echo "[WARNING] Installed but not in a virtual environment"
     fi
 else
-    echo "✗ Not installed"
+    echo "[MISSING] Not installed"
 fi
 
 # Check for AWS CLI
 echo -n "Checking for AWS CLI... "
 if command_exists aws; then
-    AWS_VERSION=$(aws --version 2>&1)
-    echo "✓ Installed ($AWS_VERSION)"
+    AWS_VERSION=$(aws --version 2>&1 | head -n1)
+    echo "[OK] Installed ($AWS_VERSION)"
 else
-    echo "✗ Not installed"
+    echo "[MISSING] Not installed"
 fi
 
 # Check for Azure CLI
 echo -n "Checking for Azure CLI... "
 if command_exists az; then
-    # Try to get a cleaner version output
-    AZ_VERSION=$(az version 2>/dev/null | grep -o '"azure-cli": *"[^"]*"' | head -n1 || echo "available")
-    echo "✓ Installed (Azure CLI $AZ_VERSION)"
+    AZ_VERSION=$(az version --short 2>/dev/null | head -n1 | cut -d' ' -f3)
+    echo "[OK] Installed ($AZ_VERSION)"
 else
-    echo "✗ Not installed"
+    echo "[MISSING] Not installed"
 fi
 
 # Check for Google Cloud CLI
 echo -n "Checking for Google Cloud CLI... "
 if command_exists gcloud; then
-    GCLOUD_VERSION=$(gcloud version --short 2>/dev/null | head -n1 || echo "available")
-    echo "✓ Installed ($GCLOUD_VERSION)"
+    GCLOUD_VERSION=$(gcloud version --short 2>/dev/null | head -n1)
+    echo "[OK] Installed ($GCLOUD_VERSION)"
 else
-    echo "✗ Not installed"
+    echo "[MISSING] Not installed"
 fi
 
 echo ""
 echo "Checking Python and pip..."
 
-# Check for Python (managed by pyenv)
+# Check for Python
 echo -n "Checking for Python... "
 if command_exists python3; then
     PYTHON_VERSION=$(python3 --version 2>&1)
-    PYTHON_PATH=$(which python3)
-    echo "✓ Installed ($PYTHON_VERSION)"
-    if [[ "$PYTHON_PATH" == *"pyenv"* ]]; then
-        echo "  - Managed by pyenv: $PYTHON_PATH"
-    else
-        echo "  - Not managed by pyenv: $PYTHON_PATH"
-    fi
-elif command_exists python; then
-    PYTHON_VERSION=$(python --version 2>&1)
-    PYTHON_PATH=$(which python)
-    echo "✓ Installed ($PYTHON_VERSION)"
-    if [[ "$PYTHON_PATH" == *"pyenv"* ]]; then
-        echo "  - Managed by pyenv: $PYTHON_PATH"
-    else
-        echo "  - Not managed by pyenv: $PYTHON_PATH"
-    fi
+    echo "[OK] Installed ($PYTHON_VERSION)"
 else
-    echo "✗ Not installed"
+    echo "[MISSING] Not installed"
 fi
 
 # Check for pip
 echo -n "Checking for pip... "
 if command_exists pip; then
-    PIP_VERSION=$(pip --version 2>&1)
-    echo "✓ Installed ($PIP_VERSION)"
+    PIP_VERSION=$(pip --version 2>&1 | head -n1)
+    echo "[OK] Installed ($PIP_VERSION)"
 elif command_exists pip3; then
-    PIP_VERSION=$(pip3 --version 2>&1)
-    echo "✓ Installed ($PIP_VERSION)"
+    PIP_VERSION=$(pip3 --version 2>&1 | head -n1)
+    echo "[OK] Installed ($PIP_VERSION)"
 else
-    echo "✗ Not installed"
+    echo "[MISSING] Not installed"
 fi
 
 echo ""
-echo "Pyenv Python environments:"
-if command_exists pyenv; then
-    pyenv versions
+echo "Summary of missing tools:"
+MISSING_TOOLS=()
+
+if ! command_exists pyenv; then MISSING_TOOLS+=("pyenv"); fi
+if ! command_exists tfenv; then MISSING_TOOLS+=("tfenv"); fi
+if ! command_exists terraform; then MISSING_TOOLS+=("terraform"); fi
+if ! command_exists ansible; then MISSING_TOOLS+=("ansible"); fi
+if ! command_exists aws; then MISSING_TOOLS+=("AWS CLI"); fi
+if ! command_exists az; then MISSING_TOOLS+=("Azure CLI"); fi
+if ! command_exists gcloud; then MISSING_TOOLS+=("Google Cloud CLI"); fi
+
+if [ ${#MISSING_TOOLS[@]} -eq 0 ]; then
+    echo "[OK] All required tools are installed!"
 else
-    echo "  pyenv not installed"
+    echo "[WARNING] The following tools are missing:"
+    for tool in "${MISSING_TOOLS[@]}"; do
+        echo "  - $tool"
+    done
+    echo ""
 fi
 
-echo ""
-echo "Tfenv Terraform versions:"
-if command_exists tfenv; then
-    echo "  Available versions: $(tfenv list 2>/dev/null || echo 'none')"
-else
-    echo "  tfenv not installed"
-fi
-
-echo ""
-echo "Summary:"
-echo "- All required tools are installed except Terraform version needs to be set"
-echo "- Ansible is installed in a dedicated pyenv environment (ansible-env-epam) but not currently active"
-echo "- Cloud CLIs (AWS, Azure, GCP) are all installed"
 echo ""
 echo "Recommendations:"
-echo "- Set a Terraform version with: tfenv install <version> && tfenv use <version>"
-echo "- Activate Ansible environment when needed: pyenv activate ansible-env-epam"
-echo "- Choose one cloud provider for your project (AWS, Azure, or GCP) and focus on it"
+echo "- Install pyenv to manage Python versions: https://github.com/pyenv/pyenv#installation"
+echo "- Install tfenv to manage Terraform versions: https://github.com/tfutils/tfenv#installation"
+echo "- Install Ansible in a virtual environment for the project"
+echo "- Choose a cloud provider (AWS, Azure, or GCP) and install the corresponding CLI tool"
+echo "- Install Terraform using tfenv once tfenv is installed"
 
 echo ""
-echo "Quick setup commands:"
-echo "  # Install and set Terraform version:"
-echo "  tfenv install 1.9.5"
-echo "  tfenv use 1.9.5"
+echo "Installation commands (for Ubuntu/Debian):"
 echo ""
-echo "  # Activate Ansible environment:"
-echo "  pyenv activate ansible-env-epam"
+echo "# Install pyenv dependencies and pyenv:"
+echo "sudo apt update"
+echo "sudo apt install -y make build-essential libssl-dev zlib1g-dev \\"
+echo "    libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \\"
+echo "    libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \\"
+echo "    libffi-dev liblzma-dev"
+echo "curl https://pyenv.run | bash"
 echo ""
-echo "  # Or if using a different Ansible environment name:"
-echo "  source ~/.pyenv/versions/ansible-env/bin/activate"
+echo "# Install tfenv:"
+echo "git clone https://github.com/tfutils/tfenv.git ~/.tfenv"
+echo "sudo ln -s ~/.tfenv/bin/* /usr/local/bin"
+echo ""
+echo "# Install Python and set up Ansible environment:"
+echo "pyenv install 3.11.5"
+echo "pyenv virtualenv ansible-env-epam"
+echo "pyenv activate ansible-env-epam  # or 'pyenv local ansible-env-epam'"
+echo "pip install ansible"
+echo ""
+echo "# Install Terraform with tfenv:"
+echo "tfenv install 1.9.5"
+echo "tfenv use 1.9.5"
+echo ""
+echo "# Install cloud CLIs (choose one or all):"
+echo "# For AWS:"
+echo "curl 'https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip' -o 'awscliv2.zip'"
+echo "unzip awscliv2.zip"
+echo "sudo ./awscliv2/install"
+echo ""
+echo "# For Azure:"
+echo "curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash"
+echo ""
+echo "# For Google Cloud:"
+echo "sudo apt install apt-transport-https ca-certificates gnupg"
+echo "echo 'deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main' | \\"
+echo "    sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list"
+echo "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -"
+echo "sudo apt update && sudo apt install google-cloud-cli"

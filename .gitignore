@@ -1,0 +1,39 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Ansible
+*.retry
+ansible.cfg
+inventory/
+
+# Environment specific
+.env
+*.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Obsidian
+.obsidian/
+
+# Google Cloud
+gcp-key.json
+application_default_credentials.json
+
+# Terraform provider binaries
+**/terraform-provider-*
+
+# Log files
+*.log
