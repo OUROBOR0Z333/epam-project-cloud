@@ -1,0 +1,21 @@
+---
+# Basic Ansible playbook for Hello World demo
+
+- name: Hello World with Ansible
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Echo Hello World message
+      debug:
+        msg: "Hello World from Ansible!"
+
+    - name: Display basic information
+      debug:
+        msg: 
+          - "This is a basic Ansible playbook"
+          - "In a real deployment, this would configure your infrastructure"
+          - "Ansible would install packages, configure services, and manage files"
+
+    - name: Echo completion message
+      debug:
+        msg: "Ansible configuration completed!"

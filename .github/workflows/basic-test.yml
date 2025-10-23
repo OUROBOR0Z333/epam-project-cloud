@@ -1,10 +1,11 @@
-name: Basic Infrastructure Test
+name: Basic Test
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -13,23 +14,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Check Terraform syntax
+    - name: Hello World
       run: |
-        if [ -f "terraform/main.tf" ]; then
-          echo "Found Terraform files"
-          ls -la terraform/
-        else
-          echo "No Terraform files found"
-        fi
-    
-    - name: Check Ansible files
+        echo "Hello World from GitHub Actions!"
+        echo "This is a basic test workflow"
+        
+    - name: Another Hello
       run: |
-        if [ -d "ansible/playbooks" ]; then
-          echo "Found Ansible playbooks"
-          ls -la ansible/playbooks/
-        else
-          echo "No Ansible playbooks found"
-        fi
-    
-    - name: Run basic shell script
-      run: echo "Basic workflow execution successful!"
+        echo "Another Hello from the workflow!"
+        echo "Workflow is working correctly"
+        
+    - name: Final Message
+      run: |
+        echo "✅ Workflow completed successfully!"
+        echo "All steps executed with basic echo commands"
