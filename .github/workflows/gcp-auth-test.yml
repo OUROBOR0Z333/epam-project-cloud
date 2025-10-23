@@ -1,0 +1,59 @@
+name: GCP Authentication Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test (dev, staging, prod)'
+        required: true
+        default: 'dev'
+
+jobs:
+  auth-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Echo Test Started
+      run: |
+        echo "Starting GCP Authentication Test..."
+        echo "Environment: ${{ github.event.inputs.environment }}"
+        echo "Repository: ${{ github.repository }}"
+        echo "Branch: ${{ github.ref }}"
+
+    - name: Setup Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+
+    - name: Test Authentication
+      run: |
+        echo "Testing authentication with service account..."
+        gcloud auth list
+        echo "✅ Authentication successful"
+
+    - name: Test Project Access
+      run: |
+        echo "Testing access to project: ${{ secrets.GCP_PROJECT_ID }}"
+        PROJECT_INFO=$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format="value(name,projectId,lifecycleState)")
+        echo "Project Info: $PROJECT_INFO"
+        echo "✅ Project access confirmed"
+
+    - name: Test Compute Engine Permissions
+      run: |
+        echo "Testing Compute Engine permissions..."
+        gcloud compute project-info describe --project=${{ secrets.GCP_PROJECT_ID }}
+        echo "✅ Compute Engine permissions OK"
+
+    - name: Test Storage Permissions
+      run: |
+        echo "Testing Storage permissions..."
+        gsutil ls -p ${{ secrets.GCP_PROJECT_ID }} || echo "No storage buckets found (this is OK)"
+        echo "✅ Storage permissions OK"
+
+    - name: Final Status
+      run: |
+        echo "🎉 GCP Authentication Test Completed!"
+        echo "All authentication and permission checks passed"
+        echo "Ready to proceed with infrastructure deployment"

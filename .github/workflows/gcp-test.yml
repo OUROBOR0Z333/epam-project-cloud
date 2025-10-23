@@ -1,0 +1,54 @@
+name: GCP Connectivity Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  gcp-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+
+    - name: Test GCP Authentication
+      run: |
+        echo "Testing GCP Authentication..."
+        gcloud auth list
+        echo "✅ Authentication test completed"
+
+    - name: Verify Project Access
+      run: |
+        echo "Verifying project access..."
+        gcloud projects describe ${{ secrets.GCP_PROJECT_ID }}
+        echo "✅ Project access verified"
+
+    - name: List Enabled Services
+      run: |
+        echo "Listing enabled services..."
+        gcloud services list --enabled
+        echo "✅ Services list completed"
+
+    - name: Test Compute Engine Access
+      run: |
+        echo "Testing Compute Engine access..."
+        gcloud compute zones list --project=${{ secrets.GCP_PROJECT_ID }}
+        echo "✅ Compute Engine access test completed"
+
+    - name: Final Verification
+      run: |
+        echo "✅ All GCP connectivity tests passed!"
+        echo "Project: ${{ secrets.GCP_PROJECT_ID }}"
+        echo "Authentication: OK"
+        echo "Basic API access: OK"
