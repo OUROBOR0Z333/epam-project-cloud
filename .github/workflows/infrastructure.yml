@@ -19,11 +19,6 @@ jobs:
         terraform_version: 1.9.5
         terraform_wrapper: false
 
-    - name: Setup Ansible
-      uses: ansible/actions/setup@v2
-      with:
-        ansible-version: '6.7.0'
-
     - name: Terraform Format
       run: |
         cd gcp-deployment
@@ -63,11 +58,6 @@ jobs:
       with:
         terraform_version: 1.9.5
         terraform_wrapper: false
-
-    - name: Setup Ansible
-      uses: ansible/actions/setup@v2
-      with:
-        ansible-version: '6.7.0'
 
     - name: Setup GCP Authentication
       run: |
