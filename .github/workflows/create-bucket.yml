@@ -33,6 +33,16 @@ jobs:
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+    # Create a temporary key file for gsutil authentication (alternative method)
+    - name: Create temporary key file for gsutil
+      run: |
+        mkdir -p $HOME/.config/gcloud
+        echo "${{ secrets.GCP_SA_KEY }}" | base64 -d > $HOME/gcp-key.json
+        export GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp-key.json
+        gcloud auth activate-service-account --key-file=$HOME/gcp-key.json
+        gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+        gcloud config set compute/region ${{ github.event.inputs.location }}
+
     - name: Create GCS Bucket
       run: |
         echo "Creating GCS bucket: ${{ github.event.inputs.bucket_name }}"
@@ -51,8 +61,6 @@ jobs:
     - name: Set IAM permissions for service account
       run: |
         echo "Setting IAM permissions for service account..."
-        # The authenticated service account should already have necessary permissions
-        # This step is just to ensure the service account has bucket access
         PROJECT_NUMBER=$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format="value(projectNumber)")
         gsutil iam ch serviceAccount:$PROJECT_NUMBER-compute@developer.gserviceaccount.com:objectCreator gs://${{ github.event.inputs.bucket_name }}/
         gsutil iam ch serviceAccount:$PROJECT_NUMBER-compute@developer.gserviceaccount.com:objectViewer gs://${{ github.event.inputs.bucket_name }}/
