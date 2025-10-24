@@ -43,10 +43,19 @@ jobs:
         gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
         gcloud config set compute/region ${{ github.event.inputs.location }}
 
-    - name: Create GCS Bucket
+    - name: Check if bucket exists and create if not
       run: |
-        echo "Creating GCS bucket: ${{ github.event.inputs.bucket_name }}"
-        gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l ${{ github.event.inputs.location }} gs://${{ github.event.inputs.bucket_name }}/
+        echo "Checking if GCS bucket exists: ${{ github.event.inputs.bucket_name }}"
+        
+        # Check if bucket exists
+        if gsutil ls -b gs://${{ github.event.inputs.bucket_name }}/ >/dev/null 2>&1; then
+          echo "Bucket gs://${{ github.event.inputs.bucket_name }}/ already exists"
+          echo "Skipping bucket creation"
+        else
+          echo "Bucket does not exist, creating: ${{ github.event.inputs.bucket_name }}"
+          gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l ${{ github.event.inputs.location }} gs://${{ github.event.inputs.bucket_name }}/
+          echo "Bucket created successfully"
+        fi
         
     - name: Enable versioning on bucket
       run: |
