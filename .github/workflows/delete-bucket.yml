@@ -56,10 +56,10 @@ jobs:
       if: env.BUCKET_EXISTS == 'true'
       run: |
         echo "Deleting GCS bucket: ${{ github.event.inputs.bucket_name }}"
-        # Remove all objects from the bucket first
-        gsutil rm -r gs://${{ github.event.inputs.bucket_name }}/ || true
+        # First, try to remove all objects from the bucket (not the bucket itself)
+        gsutil -m rm -r gs://${{ github.event.inputs.bucket_name }}/** || echo "No objects to delete or bucket is already empty"
         # Then delete the empty bucket
-        gsutil rb gs://${{ github.event.inputs.bucket_name }}/
+        gsutil rb gs://${{ github.event.inputs.bucket_name }}/ || echo "Bucket may have been already deleted"
         
     - name: Final Status
       run: |
