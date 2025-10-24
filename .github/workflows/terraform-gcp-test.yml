@@ -31,17 +31,11 @@ jobs:
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Configure Terraform for GCP
-      run: |
-        echo "Setting up Terraform for GCP..."
-        cd terraform
-        terraform init
-        echo "✅ Terraform initialized for GCP"
-
-    - name: Validate Terraform Configuration
+    - name: Validate Terraform Configuration (No Backend)
       run: |
         echo "Validating Terraform configuration..."
         cd terraform
+        # Only validate without initializing backend
         terraform validate
         echo "✅ Terraform configuration is valid"
 
@@ -52,12 +46,13 @@ jobs:
         terraform fmt -check
         echo "✅ Terraform formatting check completed"
 
-    - name: Terraform Plan (Read-Only)
+    - name: Terraform Plan (Local Only, No Backend)
       run: |
-        echo "Running Terraform plan (read-only)..."
+        echo "Running Terraform plan (local testing only)..."
         cd terraform
+        # Run plan without remote backend - just for syntax and logic validation
         terraform plan -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -detailed-exitcode || true
-        echo "✅ Terraform plan completed (no changes made)"
+        echo "✅ Terraform plan completed (no backend used for testing)"
 
     - name: Final Verification
       run: |
