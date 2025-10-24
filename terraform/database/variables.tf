@@ -1,7 +1,7 @@
-# Root variables for the entire infrastructure
 variable "project_id" {
   description = "The ID of the project"
   type        = string
+  default     = "epamgcpdeployment2"
 }
 
 variable "region" {
@@ -16,10 +16,15 @@ variable "zone" {
   default     = "us-central1-a"
 }
 
-variable "ssh_allowed_ips" {
-  description = "List of IP ranges that can SSH to the bastion"
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
+variable "vpc_network_id" {
+  description = "VPC Network ID for private services access"
+  type        = string
+}
+
+variable "db_tier" {
+  description = "Database tier - different for QA vs Prod"
+  type        = string
+  default     = "db-f1-micro"  # Free tier eligible for QA
 }
 
 variable "db_root_password" {

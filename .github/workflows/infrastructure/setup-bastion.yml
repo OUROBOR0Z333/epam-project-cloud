@@ -1,0 +1,72 @@
+name: Setup Bastion Host
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment (qa/prod)'
+        required: true
+        default: 'qa'
+
+jobs:
+  setup-bastion:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.9.5
+        terraform_wrapper: false
+
+    - name: Setup Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Create temporary key file and configure gcloud
+      run: |
+        mkdir -p $HOME/.config/gcloud
+        echo "${{ secrets.GCP_SA_KEY }}" | base64 -d > $HOME/gcp-key.json
+        export GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp-key.json
+        gcloud auth activate-service-account --key-file=$HOME/gcp-key.json
+        gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+        gcloud config set compute/region us-central1
+
+    - name: Setup Terraform workspace
+      run: |
+        cd terraform
+        terraform workspace select ${{ github.event.inputs.environment }} || terraform workspace new ${{ github.event.inputs.environment }}
+
+    - name: Initialize Terraform for Bastion
+      run: |
+        cd terraform
+        terraform init
+
+    - name: Validate Terraform configuration
+      run: |
+        cd terraform
+        terraform validate
+
+    - name: Plan Bastion infrastructure
+      run: |
+        cd terraform
+        terraform plan -var="project_id=${{ secrets.GCP_PROJECT_ID }}"
+
+    - name: Apply Bastion infrastructure
+      run: |
+        cd terraform
+        terraform apply -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -auto-approve
+
+    - name: Output Bastion information
+      run: |
+        cd terraform
+        terraform output

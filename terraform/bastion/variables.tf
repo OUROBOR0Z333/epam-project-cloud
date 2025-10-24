@@ -1,7 +1,7 @@
-# Root variables for the entire infrastructure
 variable "project_id" {
   description = "The ID of the project"
   type        = string
+  default     = "epamgcpdeployment2"
 }
 
 variable "region" {
@@ -16,14 +16,13 @@ variable "zone" {
   default     = "us-central1-a"
 }
 
+variable "public_subnet" {
+  description = "Public subnet where bastion will be deployed"
+  type        = string
+}
+
 variable "ssh_allowed_ips" {
   description = "List of IP ranges that can SSH to the bastion"
   type        = list(string)
-  default     = ["0.0.0.0/0"]
-}
-
-variable "db_root_password" {
-  description = "Root password for the database"
-  type        = string
-  sensitive   = true
+  default     = ["0.0.0.0/0"]  # In production, restrict this
 }
