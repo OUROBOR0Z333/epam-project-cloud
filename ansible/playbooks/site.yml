@@ -1,21 +1,128 @@
 ---
-# Basic Ansible playbook for Hello World demo
+# Ansible playbook for deploying the movie-analyst application
 
-- name: Hello World with Ansible
-  hosts: localhost
-  gather_facts: no
+- name: Deploy Movie Analyst Application
+  hosts: all
+  become: yes
+  vars:
+    app_user: "app"
+    app_group: "app"
+    app_dir: "/opt/movie-analyst"
+    backend_port: 3000
+    frontend_port: 3030
+    backend_url: "{{ backend_url_var | default('http://localhost:3000') }}"
+    db_host: "{{ db_host_var | default('localhost') }}"
+    db_name: "{{ db_name_var | default('movie_db') }}"
+    db_user: "{{ db_user_var | default('app_user') }}"
+    db_password: "{{ db_password_var | default('password') }}"
   tasks:
-    - name: Echo Hello World message
-      debug:
-        msg: "Hello World from Ansible!"
+    - name: Ensure app user exists
+      user:
+        name: "{{ app_user }}"
+        group: "{{ app_group }}"
+        shell: /bin/bash
+        home: "/home/{{ app_user }}"
+        create_home: yes
+        state: present
 
-    - name: Display basic information
-      debug:
-        msg: 
-          - "This is a basic Ansible playbook"
-          - "In a real deployment, this would configure your infrastructure"
-          - "Ansible would install packages, configure services, and manage files"
+    - name: Install Node.js and npm
+      apt:
+        name: 
+          - nodejs
+          - npm
+          - git
+        state: present
+        update_cache: yes
 
-    - name: Echo completion message
-      debug:
-        msg: "Ansible configuration completed!"
+    - name: Install PM2 globally
+      npm:
+        name: pm2
+        global: yes
+        state: present
+
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0755'
+
+    - name: Clone backend application
+      git:
+        repo: https://github.com/aljoveza/devops-rampup.git
+        dest: "{{ app_dir }}/movie-analyst-api"
+        force: yes
+      become_user: "{{ app_user }}"
+      notify: restart-backend
+
+    - name: Clone frontend application
+      git:
+        repo: https://github.com/aljoveza/devops-rampup.git
+        dest: "{{ app_dir }}/movie-analyst-ui"
+        force: yes
+      become_user: "{{ app_user }}"
+      notify: restart-frontend
+
+    - name: Install backend dependencies
+      npm:
+        path: "{{ app_dir }}/movie-analyst-api/movie-analyst-api"
+        state: present
+      become_user: "{{ app_user }}"
+      notify: restart-backend
+
+    - name: Install frontend dependencies
+      npm:
+        path: "{{ app_dir }}/movie-analyst-ui/movie-analyst-ui"
+        state: present
+      become_user: "{{ app_user }}"
+      notify: restart-frontend
+
+    - name: Create backend environment file
+      template:
+        src: backend.env.j2
+        dest: "{{ app_dir }}/movie-analyst-api/movie-analyst-api/.env"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0644'
+      notify: restart-backend
+
+    - name: Create frontend environment file
+      template:
+        src: frontend.env.j2
+        dest: "{{ app_dir }}/movie-analyst-ui/movie-analyst-ui/.env"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0644'
+      notify: restart-frontend
+
+    - name: Start backend service with PM2
+      command: pm2 start server.js -n movie-analyst-backend --cwd {{ app_dir }}/movie-analyst-api/movie-analyst-api
+      become_user: "{{ app_user }}"
+      args:
+        creates: ~/.pm2/apps.json
+
+    - name: Start frontend service with PM2
+      command: pm2 start server.js -n movie-analyst-frontend --cwd {{ app_dir }}/movie-analyst-ui/movie-analyst-ui
+      become_user: "{{ app_user }}"
+      args:
+        creates: ~/.pm2/apps.json
+
+    - name: Save PM2 processes
+      command: pm2 save
+      become_user: "{{ app_user }}"
+
+    - name: Ensure PM2 starts on boot
+      command: pm2 startup
+      become: yes
+      args:
+        creates: /etc/systemd/system/pm2-{{ app_user }}.service
+
+  handlers:
+    - name: restart-backend
+      command: pm2 restart movie-analyst-backend
+      become_user: "{{ app_user }}"
+
+    - name: restart-frontend
+      command: pm2 restart movie-analyst-frontend
+      become_user: "{{ app_user }}"
