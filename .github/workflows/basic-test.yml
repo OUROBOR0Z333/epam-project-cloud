@@ -1,0 +1,26 @@
+name: Basic Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment (dev/staging/prod)'
+        required: false
+        default: 'dev'
+
+jobs:
+  basic-test:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run basic tests
+        run: |
+          echo "Testing basic functionality..."
+          echo "Current directory: $(pwd)"
+          echo "List files:"
+          ls -la
+          echo "GitHub Actions environment is working correctly"

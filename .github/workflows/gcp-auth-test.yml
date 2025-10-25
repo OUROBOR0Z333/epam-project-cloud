@@ -1,0 +1,77 @@
+name: Test GCP Authentication
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment (dev/staging/prod)'
+        required: false
+        default: 'dev'
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  test-gcp-authentication:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Test Service Account Authentication
+        run: |
+          echo "Testing service account authentication..."
+          
+          # Get current authenticated account
+          CURRENT_ACCOUNT=$(gcloud auth list --format="value(account)")
+          echo "Current authenticated account: $CURRENT_ACCOUNT"
+          
+          # Verify it's a service account
+          if [[ "$CURRENT_ACCOUNT" == *"iam.gserviceaccount.com"* ]]; then
+            echo "✓ Authenticated with service account"
+          else
+            echo "⚠ Not authenticated with a service account"
+          fi
+          
+          # Test IAM permissions
+          echo "Testing IAM permissions..."
+          PROJECT_NUMBER=$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format="value(projectNumber)")
+          echo "Project number: $PROJECT_NUMBER"
+          
+          # Test access to various GCP services
+          echo "Testing access to GCP services..."
+          
+          # Test Compute Engine access
+          if gcloud compute zones list --limit=1 > /dev/null 2>&1; then
+            echo "✓ Compute Engine access: Available"
+          else
+            echo "⚠ Compute Engine access: Not available"
+          fi
+          
+          # Test Storage access
+          if gsutil ls > /dev/null 2>&1; then
+            echo "✓ Cloud Storage access: Available"
+          else
+            echo "⚠ Cloud Storage access: Not available"
+          fi
+          
+          # Test IAM access
+          if gcloud iam service-accounts list --limit=1 > /dev/null 2>&1; then
+            echo "✓ IAM access: Available"
+          else
+            echo "⚠ IAM access: Not available"
+          fi
+          
+          echo "✓ GCP authentication test completed successfully"

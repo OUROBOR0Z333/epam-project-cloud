@@ -1,0 +1,142 @@
+name: Configure Terraform Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      bucket_name:
+        description: 'GCS Bucket Name (leave empty to use TERRAFORM_STATE_BUCKET secret)'
+        required: false
+      environment:
+        description: 'Environment (dev/staging/prod)'
+        required: false
+        default: 'dev'
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  configure-terraform-backend:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Determine Bucket Name
+        run: |
+          if [ -n "${{ inputs.bucket_name }}" ]; then
+            BUCKET_NAME="${{ inputs.bucket_name }}"
+          elif [ -n "${{ secrets.TERRAFORM_STATE_BUCKET }}" ]; then
+            BUCKET_NAME="${{ secrets.TERRAFORM_STATE_BUCKET }}"
+          else
+            echo "Error: No bucket name provided. Please specify bucket name or set TERRAFORM_STATE_BUCKET secret."
+            exit 1
+          fi
+          
+          # Clean bucket name
+          BUCKET_NAME="${BUCKET_NAME#gs://}"
+          BUCKET_NAME="${BUCKET_NAME%/}"
+          
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "Error: Bucket name is empty or invalid"
+            exit 1
+          fi
+          
+          echo "BUCKET_NAME=$BUCKET_NAME" >> $GITHUB_ENV
+          echo "Using bucket name: $BUCKET_NAME"
+
+      - name: Verify Bucket Exists
+        run: |
+          echo "Verifying that bucket gs://${{ env.BUCKET_NAME }} exists..."
+          
+          if gsutil ls gs://${{ env.BUCKET_NAME }} > /dev/null 2>&1; then
+            echo "✓ Bucket exists: gs://${{ env.BUCKET_NAME }}"
+          else
+            echo "✗ Bucket does not exist: gs://${{ env.BUCKET_NAME }}"
+            echo "Please create the bucket first using the 'Create GCS Bucket' workflow"
+            exit 1
+          fi
+
+      - name: Update Terraform Backend Configuration
+        run: |
+          echo "Updating Terraform backend configuration..."
+          
+          # Backup original file
+          cp terraform/backend.tf terraform/backend.tf.backup
+          
+          # Uncomment and update the backend configuration
+          sed -i "s/# terraform {/terraform {/g; \
+                  s/#   backend \"gcs\" {/  backend \"gcs\" {/g; \
+                  s/#     bucket = \"epam-bucket-gcp2025\"/    bucket = \"${{ env.BUCKET_NAME }}\"/g; \
+                  s/#     prefix = \"terraform\\/state\"/    prefix = \"terraform\\/state\"/g; \
+                  s/# }//g" terraform/backend.tf
+          
+          echo "Updated backend configuration:"
+          cat terraform/backend.tf
+
+      - name: Initialize Terraform with GCS Backend
+        run: |
+          echo "Initializing Terraform with GCS backend..."
+          cd terraform
+          
+          # Initialize Terraform with the new backend
+          if terraform init -reconfigure; then
+            echo "✓ Terraform initialized successfully with GCS backend"
+          else
+            echo "✗ Terraform initialization failed"
+            echo "Restoring backup configuration..."
+            cp ../terraform/backend.tf.backup backend.tf
+            exit 1
+          fi
+
+      - name: Validate Terraform Configuration
+        run: |
+          echo "Validating Terraform configuration..."
+          cd terraform
+          
+          # Validate the configuration
+          if terraform validate; then
+            echo "✓ Terraform configuration is valid"
+          else
+            echo "✗ Terraform configuration validation failed"
+            exit 1
+          fi
+
+      - name: Commit and Push Backend Changes
+        run: |
+          echo "Committing and pushing backend configuration changes..."
+          
+          # Add the updated backend file
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add terraform/backend.tf
+          
+          # Commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Configure Terraform backend to use GCS bucket: ${{ env.BUCKET_NAME }}"
+            git push
+            echo "✓ Committed and pushed backend configuration changes"
+          fi
+
+      - name: Confirm Successful Setup
+        run: |
+          echo "=== Terraform Backend Configuration Summary ==="
+          echo "Bucket Name: ${{ env.BUCKET_NAME }}"
+          echo "Project ID: ${{ secrets.GCP_PROJECT_ID }}"
+          echo "Prefix: terraform/state"
+          echo ""
+          echo "✓ Terraform backend successfully configured!"
+          echo "Terraform will now store state files in GCS bucket gs://${{ env.BUCKET_NAME }}"

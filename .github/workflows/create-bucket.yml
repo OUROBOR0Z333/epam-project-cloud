@@ -1,0 +1,126 @@
+name: Create GCS Bucket
+
+on:
+  workflow_dispatch:
+    inputs:
+      bucket_name:
+        description: 'GCS Bucket Name (leave empty to use TERRAFORM_STATE_BUCKET secret)'
+        required: false
+      location:
+        description: 'Bucket Location (e.g., US, EU, asia-east1)'
+        required: false
+        default: 'US'
+      environment:
+        description: 'Environment (dev/staging/prod)'
+        required: false
+        default: 'dev'
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  create-gcs-bucket:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Determine Bucket Name
+        run: |
+          if [ -n "${{ inputs.bucket_name }}" ]; then
+            BUCKET_NAME="${{ inputs.bucket_name }}"
+          elif [ -n "${{ secrets.TERRAFORM_STATE_BUCKET }}" ]; then
+            BUCKET_NAME="${{ secrets.TERRAFORM_STATE_BUCKET }}"
+          else
+            echo "Error: No bucket name provided. Please specify bucket name or set TERRAFORM_STATE_BUCKET secret."
+            exit 1
+          fi
+          
+          # Clean bucket name
+          BUCKET_NAME="${BUCKET_NAME#gs://}"
+          BUCKET_NAME="${BUCKET_NAME%/}"
+          
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "Error: Bucket name is empty or invalid"
+            exit 1
+          fi
+          
+          echo "BUCKET_NAME=$BUCKET_NAME" >> $GITHUB_ENV
+          echo "Using bucket name: $BUCKET_NAME"
+
+      - name: Check if Bucket Exists
+        run: |
+          if gsutil ls gs://${{ env.BUCKET_NAME }} > /dev/null 2>&1; then
+            echo "Bucket gs://${{ env.BUCKET_NAME }} already exists"
+            echo "BUCKET_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "Bucket gs://${{ env.BUCKET_NAME }} does not exist"
+            echo "BUCKET_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Create GCS Bucket
+        if: env.BUCKET_EXISTS == 'false'
+        run: |
+          echo "Creating GCS bucket: gs://${{ env.BUCKET_NAME }}"
+          
+          # Create the bucket
+          if gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l ${{ inputs.location }} gs://${{ env.BUCKET_NAME }}; then
+            echo "✓ Successfully created bucket: gs://${{ env.BUCKET_NAME }}"
+          else
+            echo "✗ Failed to create bucket: gs://${{ env.BUCKET_NAME }}"
+            exit 1
+          fi
+          
+          # Enable versioning for safety
+          if gsutil versioning set on gs://${{ env.BUCKET_NAME }}; then
+            echo "✓ Enabled versioning on bucket"
+          else
+            echo "⚠ Failed to enable versioning on bucket"
+          fi
+
+      - name: Set IAM Permissions
+        if: env.BUCKET_EXISTS == 'false'
+        run: |
+          echo "Setting IAM permissions for the bucket..."
+          
+          # Get service account email
+          SA_EMAIL=$(gcloud auth list --format="value(account)" | head -n 1)
+          
+          # Set appropriate permissions
+          if gsutil iam ch serviceAccount:$SA_EMAIL:objectAdmin gs://${{ env.BUCKET_NAME }}; then
+            echo "✓ Set objectAdmin permission for service account: $SA_EMAIL"
+          else
+            echo "⚠ Failed to set objectAdmin permission"
+          fi
+          
+          if gsutil iam ch serviceAccount:$SA_EMAIL:legacyBucketOwner gs://${{ env.BUCKET_NAME }}; then
+            echo "✓ Set legacyBucketOwner permission for service account: $SA_EMAIL"
+          else
+            echo "⚠ Failed to set legacyBucketOwner permission"
+          fi
+
+      - name: Verify Bucket Creation
+        run: |
+          echo "Verifying bucket creation..."
+          if gsutil ls -L gs://${{ env.BUCKET_NAME }} > /dev/null 2>&1; then
+            echo "✓ Bucket verification successful: gs://${{ env.BUCKET_NAME }}"
+            
+            # Show bucket info
+            echo "Bucket information:"
+            gsutil ls -L gs://${{ env.BUCKET_NAME }} | grep -E "(Location|Storage class|Versioning)"
+          else
+            echo "✗ Bucket verification failed: gs://${{ env.BUCKET_NAME }}"
+            exit 1
+          fi

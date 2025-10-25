@@ -1,0 +1,63 @@
+name: Test GCP Connectivity
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment (dev/staging/prod)'
+        required: false
+        default: 'dev'
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  test-gcp-connectivity:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Test Basic GCP Connectivity
+        run: |
+          echo "Testing basic GCP connectivity..."
+          
+          # Test authentication
+          echo "1. Testing authentication:"
+          gcloud auth list
+          
+          # Test project access
+          echo "2. Testing project access:"
+          if gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} > /dev/null 2>&1; then
+            echo "✓ Successfully accessed project: ${{ secrets.GCP_PROJECT_ID }}"
+          else
+            echo "✗ Failed to access project: ${{ secrets.GCP_PROJECT_ID }}"
+            exit 1
+          fi
+          
+          # Test service availability
+          echo "3. Testing service availability:"
+          if gcloud services list --available --filter="compute.googleapis.com" | grep -q "compute.googleapis.com"; then
+            echo "✓ Compute Engine API is available"
+          else
+            echo "⚠ Compute Engine API not found in available services"
+          fi
+          
+          # Test service account permissions
+          echo "4. Testing service account permissions:"
+          SA_EMAIL=$(gcloud auth list --format="value(account)" | head -n 1)
+          echo "Using service account: $SA_EMAIL"
+          
+          echo "✓ GCP connectivity test completed successfully"
