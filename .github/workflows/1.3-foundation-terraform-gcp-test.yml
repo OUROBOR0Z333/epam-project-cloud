@@ -94,7 +94,11 @@ jobs:
         run: |
           echo "Initializing Terraform..."
           cd terraform
-          terraform init -backend=false || echo "Terraform init completed (backend disabled for testing)"
+          terraform init
+          if [ $? -ne 0 ]; then
+            echo "Terraform init failed"
+            exit 1
+          fi
 
       - name: Terraform Validate
         run: |
