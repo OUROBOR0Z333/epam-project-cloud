@@ -58,6 +58,21 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      - name: Verify Authentication
+        run: |
+          echo "Verifying authentication..."
+          gcloud auth list
+          echo "Active account:"
+          gcloud config list account
+          
+          # Test if we can access basic GCP information
+          if gcloud projects list --filter="${{ secrets.GCP_PROJECT_ID }}" --format="value(projectId)" | grep -q "${{ secrets.GCP_PROJECT_ID }}"; then
+            echo "✅ Authentication verified - can access project"
+          else
+            echo "❌ Authentication failed - cannot access project"
+            exit 1
+          fi
+
       - name: Determine Bucket Name
         run: |
           if [ -n "${{ inputs.bucket_name }}" ]; then
