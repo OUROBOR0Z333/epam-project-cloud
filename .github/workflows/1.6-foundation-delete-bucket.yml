@@ -1,4 +1,4 @@
-name: Delete GCS Bucket
+name: 1.6 Foundation - Delete GCS Bucket
 
 on:
   workflow_dispatch:

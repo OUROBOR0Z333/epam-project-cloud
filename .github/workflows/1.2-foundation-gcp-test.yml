@@ -1,4 +1,4 @@
-name: Test GCP Connectivity
+name: 1.2 Foundation - Test GCP Connectivity
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: Create GCS Bucket
+name: 1.5 Foundation - Create GCS Bucket
 
 on:
   workflow_dispatch:

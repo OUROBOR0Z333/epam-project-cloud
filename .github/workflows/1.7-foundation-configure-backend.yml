@@ -1,4 +1,4 @@
-name: Configure Terraform Backend
+name: 1.7 Foundation - Configure Terraform Backend
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: Test GCP Authentication
+name: 1.4 Foundation - Test GCP Authentication
 
 on:
   workflow_dispatch:
