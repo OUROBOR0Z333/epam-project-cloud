@@ -52,6 +52,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: "gsutil"      # ensures gsutil is available
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
