@@ -30,20 +30,23 @@ jobs:
       - name: Debug - Check if secrets are accessible
         run: |
           echo "Checking if secrets are accessible..."
-          if [ -n "${{ secrets.GCP_SA_KEY }}" ]; then
+          GCP_SA_KEY_VAL="${{ secrets.GCP_SA_KEY }}"
+          if [ -n "$GCP_SA_KEY_VAL" ]; then
             echo "✅ GCP_SA_KEY is accessible"
           else
             echo "❌ GCP_SA_KEY is not accessible or empty"
           fi
           
-          if [ -n "${{ secrets.GCP_PROJECT_ID }}" ]; then
-            echo "✅ GCP_PROJECT_ID is accessible: ${{ secrets.GCP_PROJECT_ID }}"
+          GCP_PROJECT_ID_VAL="${{ secrets.GCP_PROJECT_ID }}"
+          if [ -n "$GCP_PROJECT_ID_VAL" ]; then
+            echo "✅ GCP_PROJECT_ID is accessible: $GCP_PROJECT_ID_VAL"
           else
             echo "❌ GCP_PROJECT_ID is not accessible or empty"
           fi
           
-          if [ -n "${{ secrets.TERRAFORM_STATE_BUCKET }}" ]; then
-            echo "✅ TERRAFORM_STATE_BUCKET is accessible: ${{ secrets.TERRAFORM_STATE_BUCKET }}"
+          TERRAFORM_STATE_BUCKET_VAL="${{ secrets.TERRAFORM_STATE_BUCKET }}"
+          if [ -n "$TERRAFORM_STATE_BUCKET_VAL" ]; then
+            echo "✅ TERRAFORM_STATE_BUCKET is accessible: $TERRAFORM_STATE_BUCKET_VAL"
           else
             echo "⚠ TERRAFORM_STATE_BUCKET is not accessible or empty"
           fi
