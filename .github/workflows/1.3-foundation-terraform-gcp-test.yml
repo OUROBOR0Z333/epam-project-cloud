@@ -21,6 +21,39 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Debug - Check if secrets are accessible
+        run: |
+          echo "Checking if secrets are accessible..."
+          if [ -n "${{ secrets.GCP_SA_KEY }}" ]; then
+            echo "✅ GCP_SA_KEY is accessible"
+          else
+            echo "❌ GCP_SA_KEY is not accessible or empty"
+          fi
+          
+          if [ -n "${{ secrets.GCP_PROJECT_ID }}" ]; then
+            echo "✅ GCP_PROJECT_ID is accessible: ${{ secrets.GCP_PROJECT_ID }}"
+          else
+            echo "❌ GCP_PROJECT_ID is not accessible or empty"
+          fi
+          
+          if [ -n "${{ secrets.GCP_REGION }}" ]; then
+            echo "✅ GCP_REGION is accessible: ${{ secrets.GCP_REGION }}"
+          else
+            echo "❌ GCP_REGION is not accessible or empty"
+          fi
+          
+          if [ -n "${{ secrets.GCP_ZONE }}" ]; then
+            echo "✅ GCP_ZONE is accessible: ${{ secrets.GCP_ZONE }}"
+          else
+            echo "❌ GCP_ZONE is not accessible or empty"
+          fi
+          
+          if [ -n "${{ secrets.DB_ROOT_PASSWORD }}" ]; then
+            echo "✅ DB_ROOT_PASSWORD is accessible (value not shown for security)"
+          else
+            echo "❌ DB_ROOT_PASSWORD is not accessible or empty"
+          fi
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:

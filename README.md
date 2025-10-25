@@ -5,15 +5,40 @@ This repository contains GitHub Actions workflows for deploying infrastructure u
 ## Foundation Workflows (1.n-foundation-*)
 
 ### Test Workflows
-1. **`basic-test.yml`** - Simple echo commands to verify GitHub Actions
-2. **`gcp-test.yml`** - Test GCP connectivity and authentication
-3. **`terraform-gcp-test.yml`** - Test Terraform configuration validation
-4. **`gcp-auth-test.yml`** - Test GCP authentication with service account
+1. **`1.1-foundation-basic-test.yml`** - Simple echo commands to verify GitHub Actions
+2. **`1.2-foundation-gcp-test.yml`** - Test GCP connectivity and authentication
+3. **`1.3-foundation-terraform-gcp-test.yml`** - Test Terraform configuration validation
+4. **`1.4-foundation-gcp-auth-test.yml`** - Test GCP authentication with service account
 
 ### Infrastructure Setup Workflows
-1. **`create-bucket.yml`** - Create GCS bucket for Terraform state storage
-2. **`delete-bucket.yml`** - Delete GCS bucket (optional)
-3. **`configure-backend.yml`** - Configure Terraform to use GCS backend
+1. **`1.5-foundation-create-bucket.yml`** - Create GCS bucket for Terraform state storage
+2. **`1.6-foundation-delete-bucket.yml`** - Delete GCS bucket (optional)
+3. **`1.7-foundation-configure-backend.yml`** - Configure Terraform to use GCS backend
+
+## Troubleshooting Authentication Issues
+
+If you encounter authentication errors like "google-github-actions/auth failed with: the GitHub Action workflow must specify exactly one of 'workload_identity_provider' or 'credentials_json'", consider the following:
+
+### Common Causes:
+1. **Missing GitHub Secrets** - Ensure all required secrets are properly set in your repository settings:
+   - `GCP_SA_KEY` (Service Account Key JSON)
+   - `GCP_PROJECT_ID`
+   - `GCP_REGION`
+   - `TERRAFORM_STATE_BUCKET`
+
+2. **PR from Forks** - Secrets are not available by default for pull requests from forks for security reasons. Workflows will fail if triggered by PRs from forks.
+
+3. **Incorrectly Formatted Service Account Key** - The `GCP_SA_KEY` secret must contain a properly formatted JSON service account key.
+
+### Solutions:
+1. **Add Missing Secrets**: Go to your repository Settings > Secrets and variables > Actions and add all required secrets.
+
+2. **Proper Service Account Key Format**: The `GCP_SA_KEY` should be a base64-encoded JSON key file. You can encode it using:
+   ```bash
+   cat path/to/your/service-account-key.json | base64
+   ```
+
+3. **For PR workflows**: If you need the workflows to run on PRs, consider using Workload Identity Federation instead of service account keys, or ensure PRs are created from branches in the same repository rather than from forks.
 
 ## Infrastructure Deployment Steps (2.n-infrastructure-*)
 
