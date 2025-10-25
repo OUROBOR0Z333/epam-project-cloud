@@ -51,10 +51,12 @@ jobs:
       - name: Verify Authentication
         run: |
           echo "Verifying authentication..."
-          gcloud auth list
           echo "Active account:"
           gcloud config list account
-          
+          echo ""
+          echo "All authenticated accounts:"
+          gcloud auth list
+          echo ""
           # Test if we can access basic GCP information
           if gcloud projects list --filter="${{ secrets.GCP_PROJECT_ID }}" --format="value(projectId)" | grep -q "${{ secrets.GCP_PROJECT_ID }}"; then
             echo "✅ Authentication verified - can access project"
@@ -63,48 +65,62 @@ jobs:
             exit 1
           fi
 
-      - name: Test Service Account Authentication
+      - name: Enhanced Authentication Diagnostics
         run: |
-          echo "Testing service account authentication..."
+          echo "=== Enhanced Authentication Diagnostics ==="
+          echo "Active account details:"
+          gcloud config list account --format="json"
+          echo ""
+          echo "All authenticated accounts with details:"
+          gcloud auth list --format="json"
+          echo ""
+          echo "Project information:"
+          gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format="value(projectNumber)"
+          echo ""
+          echo "Testing specific API access..."
+          # Direct test of service account authentication
+          CURRENT_ACCOUNT=$(gcloud auth list --format="value(account)" 2>/dev/null | head -n 1)
+          echo "Primary account from gcloud auth list: $CURRENT_ACCOUNT"
           
-          # Get current authenticated account
-          CURRENT_ACCOUNT=$(gcloud auth list --format="value(account)")
-          echo "Current authenticated account: $CURRENT_ACCOUNT"
-          
-          # Verify it's a service account
-          if [[ "$CURRENT_ACCOUNT" == *"iam.gserviceaccount.com"* ]]; then
-            echo "✓ Authenticated with service account"
+          if [ -n "$CURRENT_ACCOUNT" ] && [[ "$CURRENT_ACCOUNT" == *"iam.gserviceaccount.com"* ]]; then
+            echo "✓ Authenticated with service account: $CURRENT_ACCOUNT"
           else
-            echo "⚠ Not authenticated with a service account"
+            echo "⚠ Not authenticated with a service account. Current account: $CURRENT_ACCOUNT"
           fi
+
+      - name: Test GCP API Access
+        run: |
+          echo "Testing access to various GCP services..."
           
-          # Test IAM permissions
-          echo "Testing IAM permissions..."
-          PROJECT_NUMBER=$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format="value(projectNumber)")
-          echo "Project number: $PROJECT_NUMBER"
-          
-          # Test access to various GCP services
-          echo "Testing access to GCP services..."
-          
-          # Test Compute Engine access
-          if gcloud compute zones list --limit=1 > /dev/null 2>&1; then
+          echo "1. Testing Compute Engine access..."
+          if gcloud compute zones list --limit=1 --quiet > /dev/null 2>&1; then
             echo "✓ Compute Engine access: Available"
           else
             echo "⚠ Compute Engine access: Not available"
           fi
           
-          # Test Storage access
+          echo "2. Testing Storage access..."
+          # Attempt to list storage buckets with specific error handling
           if gsutil ls > /dev/null 2>&1; then
             echo "✓ Cloud Storage access: Available"
           else
             echo "⚠ Cloud Storage access: Not available"
+            # Additional test to see what specific error we're getting
+            ERROR_OUTPUT=$(gsutil ls 2>&1 || true)
+            echo "Error when accessing storage: $ERROR_OUTPUT"
           fi
           
-          # Test IAM access
-          if gcloud iam service-accounts list --limit=1 > /dev/null 2>&1; then
+          echo "3. Testing IAM access..."
+          if gcloud iam service-accounts list --limit=1 --quiet > /dev/null 2>&1; then
             echo "✓ IAM access: Available"
           else
             echo "⚠ IAM access: Not available"
           fi
           
-          echo "✓ GCP authentication test completed successfully"
+          echo "4. Testing specific project access..."
+          PROJECT_STATUS=$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format="value(LifecycleState)" 2>/dev/null || echo "ERROR")
+          if [ "$PROJECT_STATUS" != "ERROR" ]; then
+            echo "✓ Project access: Available (State: $PROJECT_STATUS)"
+          else
+            echo "⚠ Project access: Not available"
+          fi

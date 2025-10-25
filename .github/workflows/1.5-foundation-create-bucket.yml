@@ -65,16 +65,48 @@ jobs:
       - name: Verify Authentication
         run: |
           echo "Verifying authentication..."
-          gcloud auth list
           echo "Active account:"
           gcloud config list account
-          
+          echo ""
+          echo "All authenticated accounts:"
+          gcloud auth list
+          echo ""
           # Test if we can access basic GCP information
           if gcloud projects list --filter="${{ secrets.GCP_PROJECT_ID }}" --format="value(projectId)" | grep -q "${{ secrets.GCP_PROJECT_ID }}"; then
             echo "✅ Authentication verified - can access project"
           else
             echo "❌ Authentication failed - cannot access project"
             exit 1
+          fi
+
+      - name: Enhanced Authentication Diagnostics
+        run: |
+          echo "=== Enhanced Authentication Diagnostics ==="
+          echo "Active account details:"
+          gcloud config list account --format="json"
+          echo ""
+          echo "All authenticated accounts with details:"
+          gcloud auth list --format="json"
+          echo ""
+          echo "Testing specific API access..."
+          # Direct test of service account authentication
+          CURRENT_ACCOUNT=$(gcloud auth list --format="value(account)" 2>/dev/null | head -n 1)
+          echo "Primary account from gcloud auth list: $CURRENT_ACCOUNT"
+          
+          if [ -n "$CURRENT_ACCOUNT" ] && [[ "$CURRENT_ACCOUNT" == *"iam.gserviceaccount.com"* ]]; then
+            echo "✓ Authenticated with service account: $CURRENT_ACCOUNT"
+          else
+            echo "⚠ Not authenticated with a service account. Current account: $CURRENT_ACCOUNT"
+          fi
+          
+          echo "Testing storage access before bucket creation..."
+          if gsutil ls > /dev/null 2>&1; then
+            echo "✅ Storage access available"
+          else
+            echo "⚠ Storage access not available - this will cause bucket creation to fail"
+            ERROR_OUTPUT=$(gsutil ls 2>&1 || true)
+            echo "Storage access error: $ERROR_OUTPUT"
+            exit 1  # Exit early if storage access is not available
           fi
 
       - name: Determine Bucket Name
