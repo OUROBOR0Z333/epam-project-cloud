@@ -1,0 +1,43 @@
+name: Configure Terraform Backend
+
+on:
+  workflow_dispatch:  # Allows manual triggering
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+
+jobs:
+  configure-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Create GCS Bucket for Terraform State
+        run: |
+          gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l ${{ secrets.GCP_REGION }} gs://${{ secrets.TERRAFORM_STATE_BUCKET }}
+
+      - name: Update backend configuration
+        run: |
+          sed -i 's/# terraform {/terraform {/g; s/#   backend "gcs" {/  backend "gcs" {/g; s/#     bucket = "epam-bucket-gcp2025"/    bucket = "'${{ secrets.TERRAFORM_STATE_BUCKET }}'"/g; s/#     prefix = "terraform\/state"/    prefix = "terraform\/state"/g; s/# }//g' terraform/backend.tf
+          
+      - name: Commit and Push Backend Changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add terraform/backend.tf
+          git commit -m "Configure backend for GCS" || exit 0  # Exit 0 to prevent failure if no changes
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

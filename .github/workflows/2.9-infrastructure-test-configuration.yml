@@ -1,0 +1,74 @@
+name: Test Configuration (No Changes)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to validate against (qa/prod)'
+        required: true
+        default: 'qa'
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  GCP_ZONE: ${{ secrets.GCP_ZONE }}
+
+jobs:
+  validate-configuration:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'development' || 'development' }}  # Always use development for testing
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.0
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+        working-directory: ./terraform
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ./terraform
+
+      - name: Terraform Plan (Dry Run)
+        run: |
+          echo "Running terraform plan to see what changes would occur..."
+          terraform plan \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=${{ secrets.GCP_ZONE }}" \
+            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
+            -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
+            -var="frontend_machine_type=e2-micro" \
+            -var="backend_machine_type=e2-micro"
+        working-directory: ./terraform
+
+      - name: Test Ansible Configuration
+        run: |
+          echo "Testing Ansible configuration syntax..."
+          ansible-playbook --syntax-check playbooks/site.yml
+        working-directory: ./ansible
+        env:
+          ANSIBLE_CONFIG: ./ansible/ansible.cfg
+
+      - name: Configuration Validation Complete
+        run: echo "Configuration validation completed. No changes were made to your infrastructure."
