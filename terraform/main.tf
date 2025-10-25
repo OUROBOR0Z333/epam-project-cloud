@@ -65,6 +65,8 @@ module "app_instances" {
   database_user     = module.database.database_user
   database_password = module.database.database_password
   backend_url       = "backend-${terraform.workspace}.internal:3000"  # Internal communication
+  frontend_machine_type = var.frontend_machine_type
+  backend_machine_type = var.backend_machine_type
 }
 
 # Load Balancer module

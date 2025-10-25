@@ -27,3 +27,15 @@ variable "db_root_password" {
   type        = string
   sensitive   = true
 }
+
+variable "frontend_machine_type" {
+  description = "Machine type for frontend instance"
+  type        = string
+  default     = "e2-micro"
+}
+
+variable "backend_machine_type" {
+  description = "Machine type for backend instance"
+  type        = string
+  default     = "e2-micro"
+}
