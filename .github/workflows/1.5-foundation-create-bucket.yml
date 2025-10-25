@@ -28,25 +28,26 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Debug - Check if secrets are accessible
+        env:
+          GCP_SA_KEY_VAL: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID_VAL: ${{ secrets.GCP_PROJECT_ID }}
+          TERRAFORM_STATE_BUCKET_VAL: ${{ secrets.TERRAFORM_STATE_BUCKET }}
         run: |
           echo "Checking if secrets are accessible..."
-          GCP_SA_KEY_VAL="${{ secrets.GCP_SA_KEY }}"
           if [ -n "$GCP_SA_KEY_VAL" ]; then
             echo "✅ GCP_SA_KEY is accessible"
           else
             echo "❌ GCP_SA_KEY is not accessible or empty"
           fi
           
-          GCP_PROJECT_ID_VAL="${{ secrets.GCP_PROJECT_ID }}"
           if [ -n "$GCP_PROJECT_ID_VAL" ]; then
-            echo "✅ GCP_PROJECT_ID is accessible: $GCP_PROJECT_ID_VAL"
+            echo "✅ GCP_PROJECT_ID is accessible"
           else
             echo "❌ GCP_PROJECT_ID is not accessible or empty"
           fi
           
-          TERRAFORM_STATE_BUCKET_VAL="${{ secrets.TERRAFORM_STATE_BUCKET }}"
           if [ -n "$TERRAFORM_STATE_BUCKET_VAL" ]; then
-            echo "✅ TERRAFORM_STATE_BUCKET is accessible: $TERRAFORM_STATE_BUCKET_VAL"
+            echo "✅ TERRAFORM_STATE_BUCKET is accessible"
           else
             echo "⚠ TERRAFORM_STATE_BUCKET is not accessible or empty"
           fi

@@ -22,37 +22,38 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Debug - Check if secrets are accessible
+        env:
+          GCP_SA_KEY_VAL: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID_VAL: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION_VAL: ${{ secrets.GCP_REGION }}
+          GCP_ZONE_VAL: ${{ secrets.GCP_ZONE }}
+          DB_ROOT_PASSWORD_VAL: ${{ secrets.DB_ROOT_PASSWORD }}
         run: |
           echo "Checking if secrets are accessible..."
-          GCP_SA_KEY_VAL="${{ secrets.GCP_SA_KEY }}"
           if [ -n "$GCP_SA_KEY_VAL" ]; then
             echo "✅ GCP_SA_KEY is accessible"
           else
             echo "❌ GCP_SA_KEY is not accessible or empty"
           fi
           
-          GCP_PROJECT_ID_VAL="${{ secrets.GCP_PROJECT_ID }}"
           if [ -n "$GCP_PROJECT_ID_VAL" ]; then
-            echo "✅ GCP_PROJECT_ID is accessible: $GCP_PROJECT_ID_VAL"
+            echo "✅ GCP_PROJECT_ID is accessible"
           else
             echo "❌ GCP_PROJECT_ID is not accessible or empty"
           fi
           
-          GCP_REGION_VAL="${{ secrets.GCP_REGION }}"
           if [ -n "$GCP_REGION_VAL" ]; then
-            echo "✅ GCP_REGION is accessible: $GCP_REGION_VAL"
+            echo "✅ GCP_REGION is accessible"
           else
             echo "❌ GCP_REGION is not accessible or empty"
           fi
           
-          GCP_ZONE_VAL="${{ secrets.GCP_ZONE }}"
           if [ -n "$GCP_ZONE_VAL" ]; then
-            echo "✅ GCP_ZONE is accessible: $GCP_ZONE_VAL"
+            echo "✅ GCP_ZONE is accessible"
           else
             echo "❌ GCP_ZONE is not accessible or empty"
           fi
           
-          DB_ROOT_PASSWORD_VAL="${{ secrets.DB_ROOT_PASSWORD }}"
           if [ -n "$DB_ROOT_PASSWORD_VAL" ]; then
             echo "✅ DB_ROOT_PASSWORD is accessible (value not shown for security)"
           else
