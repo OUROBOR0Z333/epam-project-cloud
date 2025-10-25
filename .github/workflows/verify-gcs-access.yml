@@ -1,0 +1,48 @@
+name: Verify GCS Access
+
+on:
+  workflow_dispatch:
+    inputs:
+      bucket:
+        description: 'GCS bucket to test (leave blank to only list buckets)'
+        required: false
+        default: ''
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  gcs-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) Authenticate with the service-account JSON that lives in repo/Org secrets
+      - id: 'auth'
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # 2) Install the CLI
+      - id: 'setup'
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'gsutil'   # not strictly necessary, but explicit
+
+      # 3) Show who we are
+      - name: Show active gcloud account
+        run: gcloud auth list --filter=status:ACTIVE
+
+      # 4) Storage access check
+      - name: List buckets in the project
+        run: |
+          echo "Buckets visible to this service account:"
+          gsutil ls   # will error out with 401 or 403 if Storage permissions are missing
+
+      - name: (Optional) List objects in a specific bucket
+        if: ${{ github.event.inputs.bucket != '' }}
+        env:
+          TEST_BUCKET: ${{ github.event.inputs.bucket }}
+        run: |
+          echo "Objects in gs://$TEST_BUCKET/"
+          gsutil ls "gs://$TEST_BUCKET/**"
