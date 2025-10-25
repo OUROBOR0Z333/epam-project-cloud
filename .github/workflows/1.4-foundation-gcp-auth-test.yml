@@ -1,124 +1,72 @@
-name: 1.4 Foundation - Test GCP Authentication
+name: 1.4 Foundation – Test GCP Authentication
 
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment (dev/staging/prod)'
+        description: "Environment (dev / staging / prod)"
         required: false
-        default: 'dev'
+        default: "dev"
 
+# Project ID is referenced in several steps
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
   test-gcp-authentication:
     runs-on: ubuntu-latest
+
+    # Map the requested env (dev|staging|prod) to a GitHub Environment
     environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
-    
+
     steps:
+      # (Optional) pull the repo
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Debug - Check if secrets are accessible
-        env:
-          GCP_SA_KEY_VAL: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID_VAL: ${{ secrets.GCP_PROJECT_ID }}
-        run: |
-          echo "Checking if secrets are accessible..."
-          if [ -n "$GCP_SA_KEY_VAL" ]; then
-            echo "✅ GCP_SA_KEY is accessible"
-          else
-            echo "❌ GCP_SA_KEY is not accessible or empty"
-          fi
-          
-          if [ -n "$GCP_PROJECT_ID_VAL" ]; then
-            echo "✅ GCP_PROJECT_ID is accessible"
-          else
-            echo "❌ GCP_PROJECT_ID is not accessible or empty"
-          fi
-
-      - name: Setup Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-
-      - name: Authenticate to Google Cloud
+      # 1) Authenticate – must come first
+      - id: auth
+        name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Verify Authentication
+      # 2) Install the gcloud / gsutil CLI
+      - id: setup
+        name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          install_components: "gsutil"      # ensures gsutil is available
+
+      # 3) Show who we are
+      - name: Verify authentication
         run: |
-          echo "Verifying authentication..."
-          gcloud auth list
           echo "Active account:"
-          gcloud config list account
-          
-          # Test if we can access basic GCP information
-          if gcloud projects list --filter="${{ secrets.GCP_PROJECT_ID }}" --format="value(projectId)" | grep -q "${{ secrets.GCP_PROJECT_ID }}"; then
-            echo "✅ Authentication verified - can access project"
-          else
-            echo "❌ Authentication failed - cannot access project"
-            exit 1
-          fi
+          gcloud auth list --filter=status:ACTIVE
+          echo "Current project:"
+          gcloud config list project
 
-      - name: Enhanced Authentication Diagnostics
+      # 4) Confirm we can reach the project
+      - name: Confirm project accessibility
         run: |
-          echo "=== Enhanced Authentication Diagnostics ==="
-          echo "Active account details:"
-          gcloud config list account --format="json"
-          echo ""
-          echo "All authenticated accounts with details:"
-          gcloud auth list --format="json"
-          echo ""
-          echo "Project information:"
-          gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format="value(projectNumber)"
-          echo ""
-          echo "Testing specific API access..."
-          # Direct test of service account authentication
-          CURRENT_ACCOUNT=$(gcloud auth list --format="value(account)" 2>/dev/null | head -n 1)
-          echo "Primary account from gcloud auth list: $CURRENT_ACCOUNT"
-          
-          if [ -n "$CURRENT_ACCOUNT" ] && [[ "$CURRENT_ACCOUNT" == *"iam.gserviceaccount.com"* ]]; then
-            echo "✓ Authenticated with service account: $CURRENT_ACCOUNT"
-          else
-            echo "⚠ Not authenticated with a service account. Current account: $CURRENT_ACCOUNT"
-          fi
+          set -e
+          gcloud projects describe "$GCP_PROJECT_ID" --format='get(projectId)'
+          echo "✓ Project $GCP_PROJECT_ID is reachable"
 
-      - name: Test GCP API Access
+      # 5) Test Cloud Storage access – job fails if this does
+      - name: Test Cloud Storage access
         run: |
-          echo "Testing access to various GCP services..."
-          
-          echo "1. Testing Compute Engine access..."
-          if gcloud compute zones list --limit=1 --quiet > /dev/null 2>&1; then
-            echo "✓ Compute Engine access: Available"
-          else
-            echo "⚠ Compute Engine access: Not available"
-          fi
-          
-          echo "2. Testing Storage access..."
-          # Attempt to list storage buckets with specific error handling
-          if gsutil ls > /dev/null 2>&1; then
-            echo "✓ Cloud Storage access: Available"
-          else
-            echo "⚠ Cloud Storage access: Not available"
-            # Additional test to see what specific error we're getting
-            ERROR_OUTPUT=$(gsutil ls 2>&1 || true)
-            echo "Error when accessing storage: $ERROR_OUTPUT"
-          fi
-          
-          echo "3. Testing IAM access..."
-          if gcloud iam service-accounts list --limit=1 --quiet > /dev/null 2>&1; then
-            echo "✓ IAM access: Available"
-          else
-            echo "⚠ IAM access: Not available"
-          fi
-          
-          echo "4. Testing specific project access..."
-          PROJECT_STATUS=$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format="value(LifecycleState)" 2>/dev/null || echo "ERROR")
-          if [ "$PROJECT_STATUS" != "ERROR" ]; then
-            echo "✓ Project access: Available (State: $PROJECT_STATUS)"
-          else
-            echo "⚠ Project access: Not available"
-          fi
+          set -e
+          echo "Buckets visible in project $GCP_PROJECT_ID:"
+          gsutil ls -p "$GCP_PROJECT_ID"
+
+      # 6) Extra API checks (optional diagnostics)
+      - name: Additional API diagnostics
+        run: |
+          set -e
+          echo "Compute zones (first 3):"
+          gcloud compute zones list --limit=3
+          echo ""
+          echo "IAM service accounts (first 3):"
+          gcloud iam service-accounts list --limit=3
