@@ -32,6 +32,9 @@ Thumbs.db
 # Google Cloud
 gcp-key.json
 application_default_credentials.json
+check-key.json
+new-service-account-key.json
+test-key.json
 
 # Terraform provider binaries
 **/terraform-provider-*
