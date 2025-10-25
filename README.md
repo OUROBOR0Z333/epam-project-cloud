@@ -32,3 +32,7 @@ This repository contains GitHub Actions workflows for deploying infrastructure u
 ## How to Use
 
 All workflows are manually triggered using `workflow_dispatch` for maximum control. You can execute foundation workflows first, then use either the sequential workflow approach or the complete deployment workflows.
+
+## Configuration
+
+Before running the workflows, ensure you have properly configured all required secrets in your GitHub repository. Refer to the [SECRETS_CONFIGURATION.md](SECRETS_CONFIGURATION.md) file for detailed instructions on setting up the required secrets, especially the `TERRAFORM_STATE_BUCKET` secret which commonly causes issues if not configured correctly.
