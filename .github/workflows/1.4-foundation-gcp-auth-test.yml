@@ -49,7 +49,28 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
           export_application_credentials: true
 
-      - name: Verify Authentication
+      - name: Verify Authentication and Set Default
+        run: |
+          echo "Setting up application default credentials..."
+          echo "${{ secrets.GCP_SA_KEY }}" > /tmp/gcp_sa_key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcp_sa_key.json --quiet
+          gcloud auth application-default login --cred-file=/tmp/gcp_sa_key.json --quiet || echo "Application default login completed"
+          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+          
+          # Verify authentication
+          echo "Active account:"
+          gcloud config list account
+          echo ""
+          echo "All authenticated accounts:"
+          gcloud auth list
+          
+          # Test if we can access basic GCP information
+          if gcloud projects list --filter="${{ secrets.GCP_PROJECT_ID }}" --format="value(projectId)" | grep -q "${{ secrets.GCP_PROJECT_ID }}"; then
+            echo "✅ Authentication verified - can access project"
+          else
+            echo "❌ Authentication failed - cannot access project"
+            exit 1
+          fi
         run: |
           echo "Verifying authentication..."
           echo "Active account:"
