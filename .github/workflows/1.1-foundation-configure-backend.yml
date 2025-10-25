@@ -26,16 +26,26 @@ jobs:
 
       - name: Create GCS Bucket for Terraform State
         run: |
-          # Ensure proper bucket name format (strip any gs:// prefix if present)
           BUCKET_NAME="${{ secrets.TERRAFORM_STATE_BUCKET }}"
-          BUCKET_NAME=${BUCKET_NAME#gs://}
+          BUCKET_NAME="${BUCKET_NAME#gs://}"
+          BUCKET_NAME="${BUCKET_NAME%/}"
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "Error: TERRAFORM_STATE_BUCKET secret is empty or invalid"
+            exit 1
+          fi
+          echo "Creating GCS bucket: gs://$BUCKET_NAME"
           gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l ${{ secrets.GCP_REGION }} gs://$BUCKET_NAME
 
       - name: Update backend configuration
         run: |
-          # Ensure proper bucket name format (strip any gs:// prefix if present)
           BUCKET_NAME="${{ secrets.TERRAFORM_STATE_BUCKET }}"
-          BUCKET_NAME=${BUCKET_NAME#gs://}
+          BUCKET_NAME="${BUCKET_NAME#gs://}"
+          BUCKET_NAME="${BUCKET_NAME%/}"
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "Error: TERRAFORM_STATE_BUCKET secret is empty or invalid"
+            exit 1
+          fi
+          echo "Updating backend configuration with bucket: $BUCKET_NAME"
           sed -i "s/# terraform {/terraform {/g; s/#   backend \"gcs\" {/  backend \"gcs\" {/g; s/#     bucket = \"epam-bucket-gcp2025\"/    bucket = \"$BUCKET_NAME\"/g; s/#     prefix = \"terraform\\/state\"/    prefix = \"terraform\\/state\"/g; s/# }//g" terraform/backend.tf
           
       - name: Commit and Push Backend Changes
