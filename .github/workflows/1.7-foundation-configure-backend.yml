@@ -151,6 +151,8 @@ jobs:
         git config --local user.name  "GitHub Action"
         git add terraform/backend.tf
         if ! git diff --cached --quiet; then
+          # Pull remote changes to avoid conflicts
+          git pull --rebase
           git commit -m "Configure Terraform backend -> gs://${{ env.BUCKET_NAME }}"
           git push
         else
