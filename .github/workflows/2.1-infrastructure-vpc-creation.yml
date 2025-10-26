@@ -1,4 +1,4 @@
-name: VPC Creation
+name: 2.1-infrastructure-vpc-creation.yml
 
 on:
   workflow_dispatch:

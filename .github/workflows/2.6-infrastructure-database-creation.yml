@@ -1,4 +1,4 @@
-name: Database Creation
+name: 2.6-infrastructure-database-creation.yml
 
 on:
   workflow_dispatch:

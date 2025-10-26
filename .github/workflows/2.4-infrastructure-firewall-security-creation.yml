@@ -1,4 +1,4 @@
-name: Firewall & Security Creation
+name: 2.4-infrastructure-firewall-security-creation.yml
 
 on:
   workflow_dispatch:

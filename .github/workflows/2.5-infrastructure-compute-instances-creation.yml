@@ -1,4 +1,4 @@
-name: Compute Instances Creation
+name: 2.5-infrastructure-compute-instances-creation.yml
 
 on:
   workflow_dispatch:

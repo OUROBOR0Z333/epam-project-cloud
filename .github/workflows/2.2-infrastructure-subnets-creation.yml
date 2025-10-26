@@ -1,4 +1,4 @@
-name: Subnets Creation
+name: 2.2-infrastructure-subnets-creation.yml
 
 on:
   workflow_dispatch:

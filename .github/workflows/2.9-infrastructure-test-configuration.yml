@@ -1,4 +1,4 @@
-name: Test Configuration (No Changes)
+name: 2.9-infrastructure-test-configuration.yml (No Changes)
 
 on:
   workflow_dispatch:

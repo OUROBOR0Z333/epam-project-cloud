@@ -1,4 +1,4 @@
-name: Load Balancer Creation
+name: 2.7-infrastructure-load-balancer-creation.yml
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: Application Deployment
+name: 2.8-infrastructure-application-deployment.yml
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: NAT Gateway Creation
+name: 2.3-infrastructure-nat-gateway-creation.yml
 
 on:
   workflow_dispatch:
