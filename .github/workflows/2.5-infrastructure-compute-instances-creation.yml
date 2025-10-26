@@ -55,9 +55,8 @@ jobs:
               -var="region=${{ secrets.GCP_REGION }}" \
               -var="zone=${{ secrets.GCP_ZONE }}" \
               -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
-              -var="private_subnet=$(terraform output -state=tfplan.tfstate -raw private_subnet_id)" \
-              -var="public_subnet=$(terraform output -state=tfplan.tfstate -raw public_subnet_id)" \
-              -out=tfplan
+              -var="private_subnet=$(terraform output -raw private_subnet_id)" \
+              -var="public_subnet=$(terraform output -raw public_subnet_id)"
           elif [ "${{ inputs.instance_type }}" = "bastion" ]; then
             terraform plan \
               -target=module.bastion \
@@ -65,21 +64,19 @@ jobs:
               -var="region=${{ secrets.GCP_REGION }}" \
               -var="zone=${{ secrets.GCP_ZONE }}" \
               -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
-              -var="public_subnet=$(terraform output -state=tfplan.tfstate -raw public_subnet_id)" \
-              -out=tfplan
+              -var="public_subnet=$(terraform output -raw public_subnet_id)"
           else
             terraform plan \
               -target=module.app_instances \
               -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
               -var="region=${{ secrets.GCP_REGION }}" \
               -var="zone=${{ secrets.GCP_ZONE }}" \
-              -var="private_subnet=$(terraform output -state=tfplan.tfstate -raw private_subnet_id)" \
+              -var="private_subnet=$(terraform output -raw private_subnet_id)" \
               -var="frontend_machine_type=e2-micro" \
-              -var="backend_machine_type=e2-micro" \
-              -out=tfplan
+              -var="backend_machine_type=e2-micro"
           fi
         working-directory: ./terraform
 
       - name: Terraform Apply Compute Instances
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform

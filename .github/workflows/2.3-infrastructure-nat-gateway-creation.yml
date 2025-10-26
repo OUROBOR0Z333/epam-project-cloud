@@ -48,10 +48,9 @@ jobs:
             -target=google_compute_router_nat.nat \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
-            -var="zone=${{ secrets.GCP_ZONE }}" \
-            -out=tfplan
+            -var="zone=${{ secrets.GCP_ZONE }}"
         working-directory: ./terraform
 
       - name: Terraform Apply NAT Gateway
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform

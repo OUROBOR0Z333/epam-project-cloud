@@ -51,23 +51,20 @@ jobs:
               -target=google_compute_subnetwork.public_subnet \
               -target=google_compute_subnetwork.private_subnet \
               -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
-              -var="region=${{ secrets.GCP_REGION }}" \
-              -out=tfplan
+              -var="region=${{ secrets.GCP_REGION }}"
           elif [ "${{ inputs.subnet_type }}" = "public" ]; then
             terraform plan \
               -target=google_compute_subnetwork.public_subnet \
               -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
-              -var="region=${{ secrets.GCP_REGION }}" \
-              -out=tfplan
+              -var="region=${{ secrets.GCP_REGION }}"
           else
             terraform plan \
               -target=google_compute_subnetwork.private_subnet \
               -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
-              -var="region=${{ secrets.GCP_REGION }}" \
-              -out=tfplan
+              -var="region=${{ secrets.GCP_REGION }}"
           fi
         working-directory: ./terraform
 
       - name: Terraform Apply Subnets
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform

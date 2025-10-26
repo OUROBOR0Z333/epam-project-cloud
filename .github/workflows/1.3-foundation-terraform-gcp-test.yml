@@ -118,6 +118,6 @@ jobs:
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
-            -out=tfplan || echo "Terraform plan completed with warnings"
+             || echo "Terraform plan completed with warnings"
           
           echo "✓ Terraform plan dry run completed"

@@ -46,10 +46,9 @@ jobs:
             -target=module.load_balancer \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
-            -var="backend_instance_group=$(terraform output -state=tfplan.tfstate -raw frontend_instance_group)" \
-            -out=tfplan
+            -var="backend_instance_group=$(terraform output -raw frontend_instance_group)"
         working-directory: ./terraform
 
       - name: Terraform Apply Load Balancer
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform

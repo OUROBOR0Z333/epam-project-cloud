@@ -48,11 +48,10 @@ jobs:
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="zone=${{ secrets.GCP_ZONE }}" \
-            -var="vpc_network_id=$(terraform output -state=tfplan.tfstate -raw vpc_id)" \
-            -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
-            -out=tfplan
+            -var="vpc_network_id=$(terraform output -raw vpc_id)" \
+            -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}"
         working-directory: ./terraform
 
       - name: Terraform Apply Database
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform

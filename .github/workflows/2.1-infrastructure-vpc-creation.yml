@@ -48,17 +48,16 @@ jobs:
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
-            -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
+            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
             -var="frontend_machine_type=e2-micro" \
-            -var="backend_machine_type=e2-micro" \
-            -out=tfplan
+            -var="backend_machine_type=e2-micro"
         working-directory: ./terraform
 
       - name: Terraform Apply VPC
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform
         
       - name: Output VPC Information
         run: |
           echo "VPC has been created successfully"
-          terraform output -state=tfplan.tfstate -raw vpc_id
+          terraform output -raw vpc_id

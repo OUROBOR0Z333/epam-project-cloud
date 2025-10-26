@@ -46,10 +46,9 @@ jobs:
             -target=module.security \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
-            -var="vpc_id=$(terraform output -state=tfplan.tfstate -raw vpc_id)" \
-            -out=tfplan
+            -var="vpc_id=$(terraform output -raw vpc_id)"
         working-directory: ./terraform
 
       - name: Terraform Apply Firewall Rules
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform

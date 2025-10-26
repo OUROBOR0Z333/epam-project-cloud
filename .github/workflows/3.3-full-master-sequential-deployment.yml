@@ -51,11 +51,11 @@ jobs:
             -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
-            -out=tfplan
+            
         working-directory: ./terraform
 
       - name: Terraform Apply VPC
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform
 
   subnets-creation:
@@ -97,11 +97,11 @@ jobs:
             -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
-            -out=tfplan
+            
         working-directory: ./terraform
 
       - name: Terraform Apply Subnets
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform
 
   nat-gateway-creation:
@@ -144,11 +144,11 @@ jobs:
             -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
-            -out=tfplan
+            
         working-directory: ./terraform
 
       - name: Terraform Apply NAT Gateway
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform
 
   firewall-security-creation:
@@ -185,16 +185,16 @@ jobs:
             -target=module.security \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
-            -var="vpc_id=$(terraform output -state=tfplan.tfstate -raw vpc_id)" \
+            -var="vpc_id=$(terraform output -raw vpc_id)" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
             -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
-            -out=tfplan
+            
         working-directory: ./terraform
 
       - name: Terraform Apply Firewall Rules
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform
 
   compute-instances-creation:
@@ -234,16 +234,16 @@ jobs:
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="zone=${{ secrets.GCP_ZONE }}" \
             -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
-            -var="private_subnet=$(terraform output -state=tfplan.tfstate -raw private_subnet_id)" \
-            -var="public_subnet=$(terraform output -state=tfplan.tfstate -raw public_subnet_id)" \
+            -var="private_subnet=$(terraform output -raw private_subnet_id)" \
+            -var="public_subnet=$(terraform output -raw public_subnet_id)" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
-            -out=tfplan
+            
         working-directory: ./terraform
 
       - name: Terraform Apply Compute Instances
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform
 
   database-creation:
@@ -281,16 +281,16 @@ jobs:
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="zone=${{ secrets.GCP_ZONE }}" \
-            -var="vpc_network_id=$(terraform output -state=tfplan.tfstate -raw vpc_id)" \
+            -var="vpc_network_id=$(terraform output -raw vpc_id)" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
             -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
-            -out=tfplan
+            
         working-directory: ./terraform
 
       - name: Terraform Apply Database
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform
 
   load-balancer-creation:
@@ -327,16 +327,16 @@ jobs:
             -target=module.load_balancer \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
-            -var="backend_instance_group=$(terraform output -state=tfplan.tfstate -raw frontend_instance_group)" \
+            -var="backend_instance_group=$(terraform output -raw frontend_instance_group)" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
             -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
-            -out=tfplan
+            
         working-directory: ./terraform
 
       - name: Terraform Apply Load Balancer
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform
 
   application-deployment:
