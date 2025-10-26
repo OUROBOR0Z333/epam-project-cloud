@@ -47,7 +47,10 @@ jobs:
             -target=google_compute_network.custom_vpc \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
-            -var="db_root_password=dummy_for_vpc_plan" \
+            -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
+            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
+            -var="frontend_machine_type=e2-micro" \
+            -var="backend_machine_type=e2-micro" \
             -out=tfplan
         working-directory: ./terraform
 
