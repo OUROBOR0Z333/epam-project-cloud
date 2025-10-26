@@ -47,6 +47,7 @@ jobs:
             -target=google_compute_network.custom_vpc \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
+            -var="db_root_password=dummy_for_vpc_plan" \
             -out=tfplan
         working-directory: ./terraform
 
