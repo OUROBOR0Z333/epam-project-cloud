@@ -239,7 +239,7 @@ jobs:
             
             # Show bucket info
             echo "Bucket information:"
-            echo "$VERIFICATION_OUTPUT" | grep -E "(Location|Storage class|Versioning|gs://)"
+            echo "$VERIFICATION_OUTPUT"
           else
             echo "✗ Bucket verification failed: gs://${{ env.BUCKET_NAME }}"
             echo "Error details: $VERIFICATION_OUTPUT"
