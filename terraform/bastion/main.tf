@@ -1,3 +1,9 @@
+# Data source to get the latest Ubuntu 22.04 LTS image
+data "google_compute_image" "ubuntu_2204" {
+  family  = "ubuntu-2204-lts"
+  project = "ubuntu-os-cloud"
+}
+
 # Local to determine machine type based on workspace
 locals {
   bastion_machine_type = terraform.workspace == "prod" ? "e2-medium" : "e2-micro"  # Smaller for QA
@@ -14,7 +20,7 @@ resource "google_compute_instance" "bastion" {
 
   boot_disk {
     initialize_params {
-      image = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
+      image = data.google_compute_image.ubuntu_2204.self_link
       size  = 10
     }
   }
