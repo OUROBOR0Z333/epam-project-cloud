@@ -43,7 +43,7 @@ resource "google_sql_database_instance" "main" {
   region           = var.region
 
   # Wait for service networking to be ready
-  depends_on = [time_sleep.wait_for_service_networking]
+  depends_on = [time_sleep.wait_for_service_networking, google_service_networking_connection.private_vpc_connection]
 
   settings {
     tier = var.db_tier  # db-f1-micro for QA, db-n1-standard-1 for Prod
