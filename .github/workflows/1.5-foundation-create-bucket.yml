@@ -137,6 +137,10 @@ jobs:
           if gsutil ls gs://${{ env.BUCKET_NAME }} > /dev/null 2>&1; then
             echo "Bucket gs://${{ env.BUCKET_NAME }} already exists"
             echo "BUCKET_EXISTS=true" >> $GITHUB_ENV
+            # Get bucket information to display
+            BUCKET_INFO=$(gsutil ls -L gs://${{ env.BUCKET_NAME }} 2>/dev/null | head -10 || echo "Could not retrieve bucket details")
+            echo "Bucket details:"
+            echo "$BUCKET_INFO"
           else
             echo "Bucket gs://${{ env.BUCKET_NAME }} does not exist"
             echo "BUCKET_EXISTS=false" >> $GITHUB_ENV
@@ -147,19 +151,33 @@ jobs:
         run: |
           echo "Creating GCS bucket: gs://${{ env.BUCKET_NAME }}"
           
-          # Create the bucket
-          if gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l ${{ inputs.location }} gs://${{ env.BUCKET_NAME }}; then
+          # Attempt to create the bucket with error handling
+          CREATE_OUTPUT=$(gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l ${{ inputs.location }} gs://${{ env.BUCKET_NAME }} 2>&1)
+          CREATE_EXIT_CODE=$?
+          
+          if [ $CREATE_EXIT_CODE -eq 0 ]; then
             echo "✓ Successfully created bucket: gs://${{ env.BUCKET_NAME }}"
           else
             echo "✗ Failed to create bucket: gs://${{ env.BUCKET_NAME }}"
+            echo "Error details: $CREATE_OUTPUT"
+            # Check if it's a permission error vs bucket already exists
+            if echo "$CREATE_OUTPUT" | grep -i "access denied\|permission denied" > /dev/null; then
+              echo "Error: Insufficient permissions to create bucket in project ${{ secrets.GCP_PROJECT_ID }}"
+            elif echo "$CREATE_OUTPUT" | grep -i "already exists\|409" > /dev/null; then
+              echo "Error: Bucket gs://${{ env.BUCKET_NAME }} already exists despite pre-check"
+            fi
             exit 1
           fi
           
           # Enable versioning for safety
-          if gsutil versioning set on gs://${{ env.BUCKET_NAME }}; then
+          VERSIONING_OUTPUT=$(gsutil versioning set on gs://${{ env.BUCKET_NAME }} 2>&1)
+          VERSIONING_EXIT_CODE=$?
+          
+          if [ $VERSIONING_EXIT_CODE -eq 0 ]; then
             echo "✓ Enabled versioning on bucket"
           else
             echo "⚠ Failed to enable versioning on bucket"
+            echo "Error details: $VERSIONING_OUTPUT"
           fi
 
       - name: Set IAM Permissions
@@ -169,30 +187,70 @@ jobs:
           
           # Get service account email
           SA_EMAIL=$(gcloud auth list --format="value(account)" | head -n 1)
+          if [ -z "$SA_EMAIL" ]; then
+            echo "⚠ Could not determine service account email"
+            exit 1
+          fi
           
-          # Set appropriate permissions
-          if gsutil iam ch serviceAccount:$SA_EMAIL:objectAdmin gs://${{ env.BUCKET_NAME }}; then
+          echo "Using service account: $SA_EMAIL"
+          
+          # Set appropriate permissions with error handling
+          OBJECT_ADMIN_OUTPUT=$(gsutil iam ch serviceAccount:$SA_EMAIL:objectAdmin gs://${{ env.BUCKET_NAME }} 2>&1)
+          OBJECT_ADMIN_EXIT_CODE=$?
+          
+          if [ $OBJECT_ADMIN_EXIT_CODE -eq 0 ]; then
             echo "✓ Set objectAdmin permission for service account: $SA_EMAIL"
           else
             echo "⚠ Failed to set objectAdmin permission"
+            echo "Error details: $OBJECT_ADMIN_OUTPUT"
           fi
           
-          if gsutil iam ch serviceAccount:$SA_EMAIL:legacyBucketOwner gs://${{ env.BUCKET_NAME }}; then
+          LEGACY_OWNER_OUTPUT=$(gsutil iam ch serviceAccount:$SA_EMAIL:legacyBucketOwner gs://${{ env.BUCKET_NAME }} 2>&1)
+          LEGACY_OWNER_EXIT_CODE=$?
+          
+          if [ $LEGACY_OWNER_EXIT_CODE -eq 0 ]; then
             echo "✓ Set legacyBucketOwner permission for service account: $SA_EMAIL"
           else
             echo "⚠ Failed to set legacyBucketOwner permission"
+            echo "Error details: $LEGACY_OWNER_OUTPUT"
+          fi
+          
+          # Verify permissions were set correctly
+          echo "Verifying set permissions..."
+          PERMISSIONS_CHECK=$(gsutil iam ls gs://${{ env.BUCKET_NAME }} 2>&1)
+          PERMISSIONS_EXIT_CODE=$?
+          
+          if [ $PERMISSIONS_EXIT_CODE -eq 0 ]; then
+            echo "Permissions successfully verified"
+            echo "$PERMISSIONS_CHECK" | grep "$SA_EMAIL" || echo "⚠ Warning: Could not verify permissions were set for $SA_EMAIL"
+          else
+            echo "⚠ Warning: Could not verify permissions - $PERMISSIONS_CHECK"
           fi
 
       - name: Verify Bucket Creation
+        if: env.BUCKET_EXISTS == 'false'
         run: |
           echo "Verifying bucket creation..."
-          if gsutil ls -L gs://${{ env.BUCKET_NAME }} > /dev/null 2>&1; then
+          VERIFICATION_OUTPUT=$(gsutil ls -L gs://${{ env.BUCKET_NAME }} 2>&1)
+          VERIFICATION_EXIT_CODE=$?
+          
+          if [ $VERIFICATION_EXIT_CODE -eq 0 ]; then
             echo "✓ Bucket verification successful: gs://${{ env.BUCKET_NAME }}"
             
             # Show bucket info
             echo "Bucket information:"
-            gsutil ls -L gs://${{ env.BUCKET_NAME }} | grep -E "(Location|Storage class|Versioning)"
+            echo "$VERIFICATION_OUTPUT" | grep -E "(Location|Storage class|Versioning|gs://)"
           else
             echo "✗ Bucket verification failed: gs://${{ env.BUCKET_NAME }}"
+            echo "Error details: $VERIFICATION_OUTPUT"
             exit 1
           fi
+          
+      - name: Verify Bucket Already Existed
+        if: env.BUCKET_EXISTS == 'true'
+        run: |
+          echo "✓ Bucket already existed: gs://${{ env.BUCKET_NAME }}"
+          echo "Bucket information:"
+          gsutil ls -L gs://${{ env.BUCKET_NAME }} | head -20
+          echo ""
+          echo "⚠ Using existing bucket. If this is not intended, please delete the bucket first."
