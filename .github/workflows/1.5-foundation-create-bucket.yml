@@ -1,19 +1,19 @@
-name: 1.5 Foundation - Create GCS Bucket
+name: 1.5 Foundation – Create GCS Bucket
 
 on:
   workflow_dispatch:
     inputs:
       bucket_name:
-        description: 'GCS Bucket Name (leave empty to use TERRAFORM_STATE_BUCKET secret)'
+        description: "GCS Bucket Name (leave empty to use TERRAFORM_STATE_BUCKET secret)"
         required: false
       location:
-        description: 'Bucket Location (e.g., US, EU, asia-east1)'
+        description: "Bucket location (US, EU, asia-east1, …)"
         required: false
-        default: 'US'
+        default: "US"
       environment:
-        description: 'Environment (dev/staging/prod)'
+        description: "Environment (dev / staging / prod)"
         required: false
-        default: 'dev'
+        default: "dev"
 
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -22,235 +22,108 @@ jobs:
   create-gcs-bucket:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
-    
+
     steps:
+      ###########################################################
+      # 0) Checkout repo (optional, but harmless)
+      ###########################################################
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Debug - Check if secrets are accessible
-        env:
-          GCP_SA_KEY_VAL: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID_VAL: ${{ secrets.GCP_PROJECT_ID }}
-          TERRAFORM_STATE_BUCKET_VAL: ${{ secrets.TERRAFORM_STATE_BUCKET }}
-        run: |
-          echo "Checking if secrets are accessible..."
-          if [ -n "$GCP_SA_KEY_VAL" ]; then
-            echo "✅ GCP_SA_KEY is accessible"
-          else
-            echo "❌ GCP_SA_KEY is not accessible or empty"
-          fi
-          
-          if [ -n "$GCP_PROJECT_ID_VAL" ]; then
-            echo "✅ GCP_PROJECT_ID is accessible"
-          else
-            echo "❌ GCP_PROJECT_ID is not accessible or empty"
-          fi
-          
-          if [ -n "$TERRAFORM_STATE_BUCKET_VAL" ]; then
-            echo "✅ TERRAFORM_STATE_BUCKET is accessible"
-          else
-            echo "⚠ TERRAFORM_STATE_BUCKET is not accessible or empty"
-          fi
-
+      ###########################################################
+      # 1) Authenticate FIRST
+      ###########################################################
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-        continue-on-error: false  # Fail fast if authentication fails
 
+      ###########################################################
+      # 2) Install gcloud / gsutil
+      ###########################################################
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          install_components: "gsutil"      # ensures gsutil is available
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          install_components: "gsutil"
 
-      - name: Verify Authentication
+      ###########################################################
+      # 3) Quick auth sanity-check
+      ###########################################################
+      - name: Verify authentication
         run: |
-          echo "Verifying authentication..."
-          gcloud auth list
-          echo "Active account:"
-          gcloud config list account
-          
-          # Test if we can access basic GCP information
-          if gcloud projects list --filter="${{ secrets.GCP_PROJECT_ID }}" --format="value(projectId)" | grep -q "${{ secrets.GCP_PROJECT_ID }}"; then
-            echo "✅ Authentication verified - can access project"
-          else
-            echo "❌ Authentication failed - cannot access project"
-            exit 1
-          fi
+          gcloud auth list --filter=status:ACTIVE
+          gcloud projects describe "$GCP_PROJECT_ID" --format='get(projectId)'
 
-      - name: Enhanced Authentication Diagnostics
-        run: |
-          echo "=== Enhanced Authentication Diagnostics ==="
-          echo "Active account details:"
-          gcloud config list account --format="json"
-          echo ""
-          echo "All authenticated accounts with details:"
-          gcloud auth list --format="json"
-          echo ""
-          echo "Testing specific API access..."
-          # Direct test of service account authentication
-          CURRENT_ACCOUNT=$(gcloud auth list --format="value(account)" 2>/dev/null | head -n 1)
-          echo "Primary account from gcloud auth list: $CURRENT_ACCOUNT"
-          
-          if [ -n "$CURRENT_ACCOUNT" ] && [[ "$CURRENT_ACCOUNT" == *"iam.gserviceaccount.com"* ]]; then
-            echo "✓ Authenticated with service account: $CURRENT_ACCOUNT"
-          else
-            echo "⚠ Not authenticated with a service account. Current account: $CURRENT_ACCOUNT"
-          fi
-          
-          echo "Testing storage access before bucket creation..."
-          if gsutil ls > /dev/null 2>&1; then
-            echo "✅ Storage access available"
-          else
-            echo "⚠ Storage access not available - this will cause bucket creation to fail"
-            ERROR_OUTPUT=$(gsutil ls 2>&1 || true)
-            echo "Storage access error: $ERROR_OUTPUT"
-            exit 1  # Exit early if storage access is not available
-          fi
-
-      - name: Determine Bucket Name
+      ###########################################################
+      # 4) Determine bucket name
+      ###########################################################
+      - name: Determine bucket name
         run: |
           if [ -n "${{ inputs.bucket_name }}" ]; then
-            BUCKET_NAME="${{ inputs.bucket_name }}"
+            BN="${{ inputs.bucket_name }}"
           elif [ -n "${{ secrets.TERRAFORM_STATE_BUCKET }}" ]; then
-            BUCKET_NAME="${{ secrets.TERRAFORM_STATE_BUCKET }}"
+            BN="${{ secrets.TERRAFORM_STATE_BUCKET }}"
           else
-            echo "Error: No bucket name provided. Please specify bucket name or set TERRAFORM_STATE_BUCKET secret."
+            echo "❌ No bucket name provided and TERRAFORM_STATE_BUCKET secret is empty"
             exit 1
           fi
-          
-          # Clean bucket name
-          BUCKET_NAME="${BUCKET_NAME#gs://}"
-          BUCKET_NAME="${BUCKET_NAME%/}"
-          
-          if [ -z "$BUCKET_NAME" ]; then
-            echo "Error: Bucket name is empty or invalid"
-            exit 1
-          fi
-          
-          echo "BUCKET_NAME=$BUCKET_NAME" >> $GITHUB_ENV
-          echo "Using bucket name: $BUCKET_NAME"
+          BN="${BN#gs://}"
+          BN="${BN%/}"
+          echo "BUCKET_NAME=$BN" >> "$GITHUB_ENV"
+          echo "Bucket to use: $BN"
 
-      - name: Check if Bucket Exists
+      ###########################################################
+      # 5) Does the bucket already exist?
+      ###########################################################
+      - name: Check if bucket exists
         run: |
-          if gsutil ls gs://${{ env.BUCKET_NAME }} > /dev/null 2>&1; then
+          if gsutil ls "gs://${{ env.BUCKET_NAME }}" >/dev/null 2>&1; then
+            echo "BUCKET_EXISTS=true"  >> "$GITHUB_ENV"
             echo "Bucket gs://${{ env.BUCKET_NAME }} already exists"
-            echo "BUCKET_EXISTS=true" >> $GITHUB_ENV
-            # Get bucket information to display
-            BUCKET_INFO=$(gsutil ls -L gs://${{ env.BUCKET_NAME }} 2>/dev/null | head -10 || echo "Could not retrieve bucket details")
-            echo "Bucket details:"
-            echo "$BUCKET_INFO"
           else
+            echo "BUCKET_EXISTS=false" >> "$GITHUB_ENV"
             echo "Bucket gs://${{ env.BUCKET_NAME }} does not exist"
-            echo "BUCKET_EXISTS=false" >> $GITHUB_ENV
           fi
 
-      - name: Create GCS Bucket
+      ###########################################################
+      # 6) Create bucket (if needed) and enable versioning
+      ###########################################################
+      - name: Create GCS bucket
         if: env.BUCKET_EXISTS == 'false'
         run: |
-          echo "Creating GCS bucket: gs://${{ env.BUCKET_NAME }}"
-          
-          # Attempt to create the bucket with error handling
-          CREATE_OUTPUT=$(gsutil mb -p ${{ secrets.GCP_PROJECT_ID }} -c STANDARD -l ${{ inputs.location }} gs://${{ env.BUCKET_NAME }} 2>&1)
-          CREATE_EXIT_CODE=$?
-          
-          if [ $CREATE_EXIT_CODE -eq 0 ]; then
-            echo "✓ Successfully created bucket: gs://${{ env.BUCKET_NAME }}"
-          else
-            echo "✗ Failed to create bucket: gs://${{ env.BUCKET_NAME }}"
-            echo "Error details: $CREATE_OUTPUT"
-            # Check if it's a permission error vs bucket already exists
-            if echo "$CREATE_OUTPUT" | grep -i "access denied\|permission denied" > /dev/null; then
-              echo "Error: Insufficient permissions to create bucket in project ${{ secrets.GCP_PROJECT_ID }}"
-            elif echo "$CREATE_OUTPUT" | grep -i "already exists\|409" > /dev/null; then
-              echo "Error: Bucket gs://${{ env.BUCKET_NAME }} already exists despite pre-check"
-            fi
-            exit 1
-          fi
-          
-          # Enable versioning for safety
-          VERSIONING_OUTPUT=$(gsutil versioning set on gs://${{ env.BUCKET_NAME }} 2>&1)
-          VERSIONING_EXIT_CODE=$?
-          
-          if [ $VERSIONING_EXIT_CODE -eq 0 ]; then
-            echo "✓ Enabled versioning on bucket"
-          else
-            echo "⚠ Failed to enable versioning on bucket"
-            echo "Error details: $VERSIONING_OUTPUT"
-          fi
+          set -e
+          echo "Creating bucket gs://${{ env.BUCKET_NAME }} in ${{ inputs.location }} ..."
+          gsutil mb -p "$GCP_PROJECT_ID" -c STANDARD -l "${{ inputs.location }}" "gs://${{ env.BUCKET_NAME }}"
+          gsutil versioning set on "gs://${{ env.BUCKET_NAME }}"
+          echo "✓ Bucket created and versioning enabled"
 
-      - name: Set IAM Permissions
+      ###########################################################
+      # 7) Grant this service-account permissions on the bucket
+      ###########################################################
+      - name: Set IAM permissions
         if: env.BUCKET_EXISTS == 'false'
         run: |
-          echo "Setting IAM permissions for the bucket..."
-          
-          # Get service account email
-          SA_EMAIL=$(gcloud auth list --format="value(account)" | head -n 1)
-          if [ -z "$SA_EMAIL" ]; then
-            echo "⚠ Could not determine service account email"
-            exit 1
-          fi
-          
-          echo "Using service account: $SA_EMAIL"
-          
-          # Set appropriate permissions with error handling
-          OBJECT_ADMIN_OUTPUT=$(gsutil iam ch serviceAccount:$SA_EMAIL:objectAdmin gs://${{ env.BUCKET_NAME }} 2>&1)
-          OBJECT_ADMIN_EXIT_CODE=$?
-          
-          if [ $OBJECT_ADMIN_EXIT_CODE -eq 0 ]; then
-            echo "✓ Set objectAdmin permission for service account: $SA_EMAIL"
-          else
-            echo "⚠ Failed to set objectAdmin permission"
-            echo "Error details: $OBJECT_ADMIN_OUTPUT"
-          fi
-          
-          LEGACY_OWNER_OUTPUT=$(gsutil iam ch serviceAccount:$SA_EMAIL:legacyBucketOwner gs://${{ env.BUCKET_NAME }} 2>&1)
-          LEGACY_OWNER_EXIT_CODE=$?
-          
-          if [ $LEGACY_OWNER_EXIT_CODE -eq 0 ]; then
-            echo "✓ Set legacyBucketOwner permission for service account: $SA_EMAIL"
-          else
-            echo "⚠ Failed to set legacyBucketOwner permission"
-            echo "Error details: $LEGACY_OWNER_OUTPUT"
-          fi
-          
-          # Verify permissions were set correctly
-          echo "Verifying set permissions..."
-          PERMISSIONS_CHECK=$(gsutil iam ls gs://${{ env.BUCKET_NAME }} 2>&1)
-          PERMISSIONS_EXIT_CODE=$?
-          
-          if [ $PERMISSIONS_EXIT_CODE -eq 0 ]; then
-            echo "Permissions successfully verified"
-            echo "$PERMISSIONS_CHECK" | grep "$SA_EMAIL" || echo "⚠ Warning: Could not verify permissions were set for $SA_EMAIL"
-          else
-            echo "⚠ Warning: Could not verify permissions - $PERMISSIONS_CHECK"
-          fi
+          SA_EMAIL=$(gcloud auth list --filter=status:ACTIVE --format='value(account)')
+          echo "Granting objectAdmin + legacyBucketOwner on the bucket to $SA_EMAIL"
+          gsutil iam ch "serviceAccount:${SA_EMAIL}:objectAdmin"       "gs://${{ env.BUCKET_NAME }}"
+          gsutil iam ch "serviceAccount:${SA_EMAIL}:legacyBucketOwner" "gs://${{ env.BUCKET_NAME }}"
 
-      - name: Verify Bucket Creation
-        if: env.BUCKET_EXISTS == 'false'
+      ###########################################################
+      # 8) Verify bucket creation   *** FIXED ***
+      ###########################################################
+      - name: Verify bucket creation
         run: |
-          echo "Verifying bucket creation..."
-          VERIFICATION_OUTPUT=$(gsutil ls -L gs://${{ env.BUCKET_NAME }} 2>&1)
-          VERIFICATION_EXIT_CODE=$?
-          
-          if [ $VERIFICATION_EXIT_CODE -eq 0 ]; then
-            echo "✓ Bucket verification successful: gs://${{ env.BUCKET_NAME }}"
-            
-            # Show bucket info
-            echo "Bucket information:"
-            echo "$VERIFICATION_OUTPUT"
+          echo "Verifying bucket gs://${{ env.BUCKET_NAME }} ..."
+          if gsutil ls -Lb "gs://${{ env.BUCKET_NAME }}" > /dev/null 2>&1; then
+            echo "✓ Bucket exists and is accessible"
+            echo ""
+            echo "Bucket metadata:"
+            gsutil ls -Lb "gs://${{ env.BUCKET_NAME }}"
+            echo ""
+            echo "Versioning status:"
+            gsutil versioning get "gs://${{ env.BUCKET_NAME }}"
           else
             echo "✗ Bucket verification failed: gs://${{ env.BUCKET_NAME }}"
-            echo "Error details: $VERIFICATION_OUTPUT"
             exit 1
           fi
-          
-      - name: Verify Bucket Already Existed
-        if: env.BUCKET_EXISTS == 'true'
-        run: |
-          echo "✓ Bucket already existed: gs://${{ env.BUCKET_NAME }}"
-          echo "Bucket information:"
-          gsutil ls -L gs://${{ env.BUCKET_NAME }} | head -20
-          echo ""
-          echo "⚠ Using existing bucket. If this is not intended, please delete the bucket first."
