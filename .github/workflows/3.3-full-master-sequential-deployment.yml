@@ -48,7 +48,7 @@ jobs:
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
-            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
+            -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
             -out=tfplan
@@ -94,7 +94,7 @@ jobs:
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
-            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
+            -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
             -out=tfplan
@@ -141,7 +141,7 @@ jobs:
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="zone=${{ secrets.GCP_ZONE }}" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
-            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
+            -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
             -out=tfplan
@@ -187,7 +187,7 @@ jobs:
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="vpc_id=$(terraform output -state=tfplan.tfstate -raw vpc_id)" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
-            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
+            -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
             -out=tfplan
@@ -233,7 +233,7 @@ jobs:
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="zone=${{ secrets.GCP_ZONE }}" \
-            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
+            -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="private_subnet=$(terraform output -state=tfplan.tfstate -raw private_subnet_id)" \
             -var="public_subnet=$(terraform output -state=tfplan.tfstate -raw public_subnet_id)" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
@@ -283,7 +283,7 @@ jobs:
             -var="zone=${{ secrets.GCP_ZONE }}" \
             -var="vpc_network_id=$(terraform output -state=tfplan.tfstate -raw vpc_id)" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
-            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
+            -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
             -out=tfplan
@@ -329,7 +329,7 @@ jobs:
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="backend_instance_group=$(terraform output -state=tfplan.tfstate -raw frontend_instance_group)" \
             -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
-            -var="ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}" \
+            -var='ssh_allowed_ips=${{ secrets.SSH_ALLOWED_IPS }}' \
             -var="frontend_machine_type=e2-micro" \
             -var="backend_machine_type=e2-micro" \
             -out=tfplan
