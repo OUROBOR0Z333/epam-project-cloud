@@ -20,7 +20,7 @@ resource "google_compute_instance" "bastion" {
 
   boot_disk {
     initialize_params {
-      image = data.google_compute_image.ubuntu_2204.self_link
+      image = var.image
       size  = 10
     }
   }

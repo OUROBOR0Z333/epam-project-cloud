@@ -1,9 +1,3 @@
-# Data source to get the latest Ubuntu 22.04 LTS image
-data "google_compute_image" "ubuntu_2204" {
-  family  = "ubuntu-2204-lts"
-  project = "ubuntu-os-cloud"
-}
-
 # Instance template for frontend
 resource "google_compute_instance_template" "frontend" {
   name         = "frontend-template-${terraform.workspace}"
@@ -12,7 +6,7 @@ resource "google_compute_instance_template" "frontend" {
   tags = ["frontend-${terraform.workspace}", "app-${terraform.workspace}"]
 
   disk {
-    source_image = data.google_compute_image.ubuntu_2204.self_link
+    source_image = var.image
     auto_delete  = true
     boot         = true
     disk_size_gb = 20
@@ -67,7 +61,7 @@ resource "google_compute_instance" "backend" {
 
   boot_disk {
     initialize_params {
-      image = data.google_compute_image.ubuntu_2204.self_link
+      image = var.image
       size  = 20
     }
   }

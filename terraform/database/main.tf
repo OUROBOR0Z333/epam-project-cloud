@@ -11,27 +11,9 @@ terraform {
   }
 }
 
-# Reserve IP range for private services (Cloud SQL)
-resource "google_compute_global_address" "private_service_range" {
-  name          = "sql-private-range-${terraform.workspace}"
-  purpose       = "VPC_PEERING"
-  address_type  = "INTERNAL"
-  prefix_length = 24
-  network       = var.vpc_network_id
-  project       = var.project_id
-}
-
-# Create private service connection for VPC peering
-resource "google_service_networking_connection" "private_vpc_connection" {
-  network                 = var.vpc_network_id
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.private_service_range.name]
-  depends_on              = [google_compute_global_address.private_service_range]
-}
-
 # Wait for service networking to be ready before creating database
 resource "time_sleep" "wait_for_service_networking" {
-  depends_on = [google_service_networking_connection.private_vpc_connection]
+  # Wait for the service networking connection in the network module
   create_duration = "60s"
 }
 
@@ -43,7 +25,7 @@ resource "google_sql_database_instance" "main" {
   region           = var.region
 
   # Wait for service networking to be ready
-  depends_on = [time_sleep.wait_for_service_networking, google_service_networking_connection.private_vpc_connection]
+  depends_on = [time_sleep.wait_for_service_networking]
 
   settings {
     tier = var.db_tier  # db-f1-micro for QA, db-n1-standard-1 for Prod

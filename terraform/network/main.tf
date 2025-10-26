@@ -48,6 +48,24 @@ resource "google_compute_router_nat" "nat" {
   udp_idle_timeout_sec = 30
 }
 
+# Reserve IP range for private services (Cloud SQL)
+resource "google_compute_global_address" "sql_psc_range" {
+  name          = "sql-private-range-${terraform.workspace}"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 24
+  network       = google_compute_network.custom_vpc.id
+  project       = var.project_id
+}
+
+# Create private service connection for VPC peering
+resource "google_service_networking_connection" "sql_psc" {
+  network                 = google_compute_network.custom_vpc.id
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.sql_psc_range.name]
+  depends_on              = [google_compute_global_address.sql_psc_range]
+}
+
 # Internet Gateway (automatically created with VPC)
 # Route table configuration (default routes included with VPC)
 

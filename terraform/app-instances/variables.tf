@@ -65,3 +65,8 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+variable "image" {
+  description = "VM image to use for instances"
+  type        = string
+}

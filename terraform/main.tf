@@ -22,6 +22,11 @@ provider "google" {
   region  = var.region
 }
 
+locals {
+  # Use Ubuntu 22.04 since 20.04 is deprecated
+  vm_image = coalesce(var.vm_image, data.google_compute_image.ubuntu_2204.self_link)
+}
+
 # Network module
 module "network" {
   source       = "./network"
@@ -44,6 +49,7 @@ module "bastion" {
   zone           = var.zone
   public_subnet  = module.network.public_subnet_id
   ssh_allowed_ips = var.ssh_allowed_ips
+  image          = local.vm_image
 }
 
 # Database module
@@ -71,6 +77,7 @@ module "app_instances" {
   backend_url       = "backend-${terraform.workspace}.internal:3000"  # Internal communication
   frontend_machine_type = var.frontend_machine_type
   backend_machine_type = var.backend_machine_type
+  image             = local.vm_image
 }
 
 # Load Balancer module

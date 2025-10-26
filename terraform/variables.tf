@@ -39,3 +39,9 @@ variable "backend_machine_type" {
   type        = string
   default     = "e2-micro"
 }
+
+variable "vm_image" {
+  description = "Self-link of the image each VM should boot from"
+  type        = string
+  default     = ""   # root module sets it in locals
+}

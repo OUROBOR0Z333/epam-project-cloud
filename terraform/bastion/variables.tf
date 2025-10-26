@@ -26,3 +26,8 @@ variable "ssh_allowed_ips" {
   type        = list(string)
   default     = ["0.0.0.0/0"]  # In production, restrict this
 }
+
+variable "image" {
+  description = "VM image to use for the bastion instance"
+  type        = string
+}
