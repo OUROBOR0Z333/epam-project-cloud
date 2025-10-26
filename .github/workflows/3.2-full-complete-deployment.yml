@@ -73,10 +73,9 @@ jobs:
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="region=${{ secrets.GCP_REGION }}" \
             -var="zone=${{ secrets.GCP_ZONE }}" \
-            -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
-            -out=tfplan
+            -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}"
         working-directory: ./terraform
 
       - name: Terraform Apply
-        run: terraform apply tfplan
+        run: terraform apply -auto-approve
         working-directory: ./terraform
