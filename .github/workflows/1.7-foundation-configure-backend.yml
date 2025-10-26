@@ -46,10 +46,10 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
       with:
-        terraform_version: 1.5.7      # pin the version you need
+        terraform_version: 1.5.7    # choose the version you need
 
     #####################################################################
-    # 4) Quick auth sanity-check
+    # 4) Verify authentication quickly
     #####################################################################
     - name: Verify authentication
       run: |
@@ -66,7 +66,7 @@ jobs:
         elif [ -n "${{ secrets.TERRAFORM_STATE_BUCKET }}" ]; then
           BN="${{ secrets.TERRAFORM_STATE_BUCKET }}"
         else
-          echo "❌ No bucket name provided and TERRAFORM_STATE_BUCKET secret is empty"
+          echo "❌ No bucket name supplied and TERRAFORM_STATE_BUCKET secret is empty"
           exit 1
         fi
         BN="${BN#gs://}"
@@ -75,7 +75,7 @@ jobs:
         echo "Using bucket: $BN"
 
     #####################################################################
-    # 6) Check if bucket exists  →  expose result as step output
+    # 6) Check if bucket exists (expose as step output)
     #####################################################################
     - id: check
       name: Check if bucket exists
@@ -87,7 +87,7 @@ jobs:
         fi
 
     #####################################################################
-    # 7) Fail fast when bucket is missing
+    # 7) Abort if bucket is missing
     #####################################################################
     - name: Verify bucket exists
       if: steps.check.outputs.exists == 'false'
@@ -97,36 +97,38 @@ jobs:
         exit 1
 
     #####################################################################
-    # 8) Update Terraform backend  *** FIXED ***
+    # 8) Update Terraform backend               <<<  FIXED
     #####################################################################
     - name: Update Terraform backend
       run: |
         echo "Updating Terraform backend..."
         cp terraform/backend.tf terraform/backend.tf.backup
 
-        # 8.1 Replace the bucket line inside the backend block
-        sed -i "s/^ *bucket *= *\"[^\"]*\"/  bucket = \"${{ env.BUCKET_NAME }}\"/" terraform/backend.tf
+        # 8-A  replace the bucket line
+        sed -i \
+          "s/^ *bucket *= *\"[^\"]*\"/  bucket = \"${{ env.BUCKET_NAME }}\"/" \
+          terraform/backend.tf
 
-        # 8.2 Uncomment backend block lines if they were commented out
-        sed -i 's/^#\s*$backend "gcs"$/\1/' terraform/backend.tf
-        sed -i 's/^#\s*$bucket =$/\1/'       terraform/backend.tf
-        sed -i 's/^#\s*$prefix =$/\1/'       terraform/backend.tf
-        sed -i 's/^#\s*}//'                    terraform/backend.tf
+        # 8-B  uncomment backend block lines (remove leading "#")
+        sed -i 's/^#[[:space:]]*backend "gcs"/backend "gcs"/' terraform/backend.tf
+        sed -i 's/^#[[:space:]]*bucket =/bucket =/'           terraform/backend.tf
+        sed -i 's/^#[[:space:]]*prefix =/prefix =/'           terraform/backend.tf
+        sed -i 's/^#[[:space:]]*}/}/'                         terraform/backend.tf
 
         echo "backend.tf after update:"
         cat terraform/backend.tf
 
     #####################################################################
-    # 9) Terraform init (with reconfigure)
+    # 9) Terraform init
     #####################################################################
     - name: Initialize Terraform
       run: |
-        echo "Initializing Terraform with GCS backend..."
+        echo "Running terraform init ..."
         cd terraform
         if terraform init -reconfigure; then
           echo "✓ Terraform initialized"
         else
-          echo "✗ Terraform initialization failed"
+          echo "✗ Terraform init failed – restoring backup"
           cp backend.tf.backup backend.tf
           exit 1
         fi
