@@ -69,33 +69,6 @@ resource "google_service_networking_connection" "sql_psc" {
 # Internet Gateway (automatically created with VPC)
 # Route table configuration (default routes included with VPC)
 
-# Outputs
-output "vpc_id" {
-  description = "VPC ID"
-  value       = google_compute_network.custom_vpc.id
-}
-
-output "public_subnet_id" {
-  description = "Public Subnet ID"
-  value       = google_compute_subnetwork.public_subnet.id
-}
-
-output "private_subnet_id" {
-  description = "Private Subnet ID"
-  value       = google_compute_subnetwork.private_subnet.id
-}
-
-output "public_subnet_name" {
-  description = "Public Subnet Name"
-  value       = google_compute_subnetwork.public_subnet.name
-}
-
-output "private_subnet_name" {
-  description = "Private Subnet Name"
-  value       = google_compute_subnetwork.private_subnet.name
-}
-
-output "router_name" {
   description = "Router name for NAT"
   value       = google_compute_router.router.name
 }
