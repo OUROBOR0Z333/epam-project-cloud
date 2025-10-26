@@ -4,9 +4,9 @@
 # By default, use local backend for testing
 # The configure-backend workflow will modify this for production deployments
 terraform {
-  # backend "gcs" {
-  #   bucket = "epam-bucket-gcp2025"
-  #   prefix = "terraform/state"
-  # }
+  backend "gcs" {
+    bucket = "epam-bucket-gcp2025"
+    prefix = "terraform/state"
+    }
 # backend "local" {}
 }
