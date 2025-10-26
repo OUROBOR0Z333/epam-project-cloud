@@ -6,7 +6,7 @@ resource "google_compute_instance_template" "frontend" {
   tags = ["frontend-${terraform.workspace}", "app-${terraform.workspace}"]
 
   disk {
-    source_image = "ubuntu-os-cloud/ubuntu-2004-lts"
+    source_image = "ubuntu-os-cloud/ubuntu-2204-lts"
     auto_delete  = true
     boot         = true
     disk_size_gb = 20
@@ -61,7 +61,7 @@ resource "google_compute_instance" "backend" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2004-lts"
+      image = "ubuntu-os-cloud/ubuntu-2204-lts"
       size  = 20
     }
   }
