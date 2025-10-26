@@ -77,3 +77,5 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
         working-directory: ./terraform
+        env:
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
