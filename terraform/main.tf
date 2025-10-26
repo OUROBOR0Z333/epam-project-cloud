@@ -47,6 +47,7 @@ module "bastion" {
   project_id     = var.project_id
   region         = var.region
   zone           = var.zone
+  vpc_network    = module.network.vpc_id
   public_subnet  = module.network.public_subnet_id
   ssh_allowed_ips = var.ssh_allowed_ips
   image          = local.vm_image

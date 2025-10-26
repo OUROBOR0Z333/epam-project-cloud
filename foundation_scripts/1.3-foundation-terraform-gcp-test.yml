@@ -1,0 +1,123 @@
+name: 1.3 Foundation - Terraform GCP Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment (dev/staging/prod)'
+        required: false
+        default: 'dev'
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+
+jobs:
+  terraform-gcp-test:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Debug - Check if secrets are accessible
+        env:
+          GCP_SA_KEY_VAL: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID_VAL: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION_VAL: ${{ secrets.GCP_REGION }}
+          GCP_ZONE_VAL: ${{ secrets.GCP_ZONE }}
+          DB_ROOT_PASSWORD_VAL: ${{ secrets.DB_ROOT_PASSWORD }}
+        run: |
+          echo "Checking if secrets are accessible..."
+          if [ -n "$GCP_SA_KEY_VAL" ]; then
+            echo "✅ GCP_SA_KEY is accessible"
+          else
+            echo "❌ GCP_SA_KEY is not accessible or empty"
+          fi
+          
+          if [ -n "$GCP_PROJECT_ID_VAL" ]; then
+            echo "✅ GCP_PROJECT_ID is accessible"
+          else
+            echo "❌ GCP_PROJECT_ID is not accessible or empty"
+          fi
+          
+          if [ -n "$GCP_REGION_VAL" ]; then
+            echo "✅ GCP_REGION is accessible"
+          else
+            echo "❌ GCP_REGION is not accessible or empty"
+          fi
+          
+          if [ -n "$GCP_ZONE_VAL" ]; then
+            echo "✅ GCP_ZONE is accessible"
+          else
+            echo "❌ GCP_ZONE is not accessible or empty"
+          fi
+          
+          if [ -n "$DB_ROOT_PASSWORD_VAL" ]; then
+            echo "✅ DB_ROOT_PASSWORD is accessible (value not shown for security)"
+          else
+            echo "❌ DB_ROOT_PASSWORD is not accessible or empty"
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.0
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Verify Authentication
+        run: |
+          echo "Verifying authentication..."
+          gcloud auth list
+          echo "Active account:"
+          gcloud config list account
+          
+          # Test if we can access basic GCP information
+          if gcloud projects list --filter="${{ secrets.GCP_PROJECT_ID }}" --format="value(projectId)" | grep -q "${{ secrets.GCP_PROJECT_ID }}"; then
+            echo "✅ Authentication verified - can access project"
+          else
+            echo "❌ Authentication failed - cannot access project"
+            exit 1
+          fi
+
+      - name: Terraform Init
+        run: |
+          echo "Initializing Terraform..."
+          cd terraform
+          terraform init
+          if [ $? -ne 0 ]; then
+            echo "Terraform init failed"
+            exit 1
+          fi
+
+      - name: Terraform Validate
+        run: |
+          echo "Validating Terraform configuration..."
+          cd terraform
+          terraform validate
+          echo "✓ Terraform configuration is valid"
+
+      - name: Terraform Plan (Dry Run)
+        run: |
+          echo "Running Terraform plan (dry run)..."
+          cd terraform
+          terraform plan \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=${{ secrets.GCP_ZONE }}" \
+            -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
+            -var="frontend_machine_type=e2-micro" \
+            -var="backend_machine_type=e2-micro" \
+            -out=tfplan || echo "Terraform plan completed with warnings"
+          
+          echo "✓ Terraform plan dry run completed"

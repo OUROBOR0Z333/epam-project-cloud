@@ -26,7 +26,7 @@ resource "google_compute_instance" "bastion" {
   }
 
   network_interface {
-    network    = var.public_subnet
+    network    = var.vpc_network
     subnetwork = var.public_subnet
 
     access_config {

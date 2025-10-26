@@ -1,0 +1,72 @@
+name: 1.4 Foundation – Test GCP Authentication
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment (dev / staging / prod)"
+        required: false
+        default: "dev"
+
+# Project ID is referenced in several steps
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  test-gcp-authentication:
+    runs-on: ubuntu-latest
+
+    # Map the requested env (dev|staging|prod) to a GitHub Environment
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+
+    steps:
+      # (Optional) pull the repo
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 1) Authenticate – must come first
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # 2) Install the gcloud / gsutil CLI
+      - id: setup
+        name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          install_components: "gsutil"      # ensures gsutil is available
+
+      # 3) Show who we are
+      - name: Verify authentication
+        run: |
+          echo "Active account:"
+          gcloud auth list --filter=status:ACTIVE
+          echo "Current project:"
+          gcloud config list project
+
+      # 4) Confirm we can reach the project
+      - name: Confirm project accessibility
+        run: |
+          set -e
+          gcloud projects describe "$GCP_PROJECT_ID" --format='get(projectId)'
+          echo "✓ Project $GCP_PROJECT_ID is reachable"
+
+      # 5) Test Cloud Storage access – job fails if this does
+      - name: Test Cloud Storage access
+        run: |
+          set -e
+          echo "Buckets visible in project $GCP_PROJECT_ID:"
+          gsutil ls -p "$GCP_PROJECT_ID"
+
+      # 6) Extra API checks (optional diagnostics)
+      - name: Additional API diagnostics
+        run: |
+          set -e
+          echo "Compute zones (first 3):"
+          gcloud compute zones list --limit=3
+          echo ""
+          echo "IAM service accounts (first 3):"
+          gcloud iam service-accounts list --limit=3

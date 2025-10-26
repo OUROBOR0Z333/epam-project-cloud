@@ -16,6 +16,11 @@ variable "zone" {
   default     = "us-central1-a"
 }
 
+variable "vpc_network" {
+  description = "VPC network ID where bastion will be deployed"
+  type        = string
+}
+
 variable "public_subnet" {
   description = "Public subnet where bastion will be deployed"
   type        = string
