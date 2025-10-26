@@ -104,20 +104,15 @@ jobs:
         echo "Updating Terraform backend..."
         cp terraform/backend.tf terraform/backend.tf.backup
 
-        # 8-A  Replace the bucket name in the commented GCS block
-        sed -i "s/bucket = \"[^\"]*\"/bucket = \"${{ env.BUCKET_NAME }}\"/" terraform/backend.tf
-
-        # 8-B  Replace the entire GCS block with uncommented version
-        sed -e '/^# backend "gcs" {/,/^# }/{
-          s/^# backend "gcs" {/  backend "gcs" {/
-          s/^#   bucket =/    bucket =/
-          s/^#   prefix =/    prefix =/
-          s/^# }/  }/
-        }' -i terraform/backend.tf
-
-        # 8-C  Comment out the local backend if it's not already commented
-        sed -i 's/^  backend "local" {}/# backend "local" {}/' terraform/backend.tf
-        sed -i 's/^backend "local" {}/# backend "local" {}/' terraform/backend.tf
+        # Create the new content by replacing the old pattern with the new one
+        # This approach directly replaces the entire commented GCS block with an uncommented one
+        sed -i.bak \
+          -e "s|# backend \"gcs\" {|backend \"gcs\" {|g" \
+          -e "s|#   bucket = \"[^\"]*\"|  bucket = \"${{ env.BUCKET_NAME }}\"|g" \
+          -e "s|#   prefix = \"[^\"]*\"|  prefix = \"terraform/state\"|g" \
+          -e "s|# }|  }|g" \
+          -e "s|^  backend \"local\" {}|# backend \"local\" {}|g" \
+          terraform/backend.tf
 
         echo "backend.tf after update:"
         cat terraform/backend.tf
