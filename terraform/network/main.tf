@@ -69,6 +69,3 @@ resource "google_service_networking_connection" "sql_psc" {
 # Internet Gateway (automatically created with VPC)
 # Route table configuration (default routes included with VPC)
 
-  description = "Router name for NAT"
-  value       = google_compute_router.router.name
-}
