@@ -62,6 +62,7 @@ module "database" {
   vpc_network_id    = module.network.vpc_id
   db_tier           = "db-f1-micro"  # Free-tier eligible for both environments
   db_root_password  = var.db_root_password
+  psc_connection    = module.network.sql_psc_connection_ready
 }
 
 # App Instances module

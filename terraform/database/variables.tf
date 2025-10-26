@@ -32,3 +32,9 @@ variable "db_root_password" {
   type        = string
   sensitive   = true
 }
+
+variable "psc_connection" {
+  description = "Private Service Connect connection to ensure it's ready before creating DB instance"
+  type        = any
+  default     = null
+}

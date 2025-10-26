@@ -14,7 +14,7 @@ terraform {
 # Wait for service networking to be ready before creating database
 resource "time_sleep" "wait_for_service_networking" {
   # Wait for the service networking connection in the network module
-  create_duration = "60s"
+  create_duration = "120s"
 }
 
 # Cloud SQL instance for MySQL
@@ -25,7 +25,7 @@ resource "google_sql_database_instance" "main" {
   region           = var.region
 
   # Wait for service networking to be ready
-  depends_on = [time_sleep.wait_for_service_networking]
+  depends_on = [time_sleep.wait_for_service_networking, var.psc_connection]
 
   settings {
     tier = var.db_tier  # db-f1-micro for QA, db-n1-standard-1 for Prod
