@@ -86,15 +86,9 @@ jobs:
           echo "Switching to default workspace..."
           terraform workspace select default
           
-          # Verify we have an existing state in the default workspace before attempting to destroy
-          if [ -f "terraform.tfstate" ] || [ -f "terraform.tfstate.backup" ]; then
-            echo "Found state file in default workspace. Preparing to destroy..."
-            # List resources that will be destroyed
-            terraform plan -destroy -out=tfplan.binary
-          else
-            echo "No state file found in default workspace."
-            exit 1
-          fi
+          echo "Found state in default workspace. Preparing to destroy..."
+          # List resources that will be destroyed
+          terraform plan -destroy -out=tfplan.binary
         env:
           TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
           TF_VAR_region: ${{ secrets.GCP_REGION }}
