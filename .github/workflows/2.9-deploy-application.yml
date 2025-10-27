@@ -193,9 +193,10 @@ jobs:
           # First, get the frontend instance from the managed instance group
           echo "Creating inventory file for ${{ inputs.environment }} environment..."
           
-          # Ensure the inventory directory exists with more explicit approach
+          # Ensure the ansible and inventory directories exist with more explicit approach
           pwd  # Print current directory for debugging
           ls -la  # List directory contents for debugging
+          mkdir -p ./ansible
           mkdir -p ./ansible/inventory
           ls -la ./ansible/  # List ansible directory contents for debugging
           
