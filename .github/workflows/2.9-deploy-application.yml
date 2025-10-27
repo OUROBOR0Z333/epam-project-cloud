@@ -156,10 +156,10 @@ jobs:
           # Get app service account for backend/frontend use
           APP_SA=$(terraform output -raw app_service_account 2>/dev/null || echo "")
           if [ -n "$APP_SA" ]; then
-            APP_USER=$(echo "$APP_SA" | cut -d@ -f1)
-            echo "APP_USER=$APP_USER" >> $GITHUB_ENV
+            echo "APP_SA=$APP_SA" >> $GITHUB_ENV
           else
-            echo "APP_USER=ubuntu" >> $GITHUB_ENV
+            echo "Could not determine app service account"
+            exit 1
           fi
           
           echo "Infrastructure details retrieved successfully"
@@ -169,6 +169,35 @@ jobs:
           TF_VAR_region: ${{ secrets.GCP_REGION }}
           TF_VAR_zone: ${{ secrets.GCP_ZONE }}
           TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+
+      - name: Configure SSH for GCP OS Login
+        id: os-login-key
+        run: |
+          # Generate a temporary SSH key for this workflow run only
+          ssh-keygen -t ed25519 -f ~/.ssh/gcp_oslogin_key -N ""
+
+          # Associate the public key with the service accounts for 30 minutes
+          gcloud compute os-login ssh-keys add \
+            --key-file ~/.ssh/gcp_oslogin_key.pub \
+            --ttl 30m \
+            --project ${{ env.GCP_PROJECT_ID }}
+
+          # Get the correct OS Login POSIX username for the bastion
+          # The format is sa_ plus the first 10 digits of the SA's uniqueId
+          BASTION_SA_EMAIL="${{ env.BASTION_SA }}"
+          BASTION_UNIQUE_ID=$(gcloud iam service-accounts describe "$BASTION_SA_EMAIL" --format="value(uniqueId)")
+          BASTION_OS_USER="sa_$(echo $BASTION_UNIQUE_ID | cut -c 1-10)"
+          echo "BASTION_OS_USER=$BASTION_OS_USER" >> $GITHUB_OUTPUT
+
+          # Get the correct OS Login POSIX username for the app instances
+          APP_SA_EMAIL="${{ env.APP_SA }}"
+          APP_UNIQUE_ID=$(gcloud iam service-accounts describe "$APP_SA_EMAIL" --format="value(uniqueId)")
+          APP_OS_USER="sa_$(echo $APP_UNIQUE_ID | cut -c 1-10)"
+          echo "APP_OS_USER=$APP_OS_USER" >> $GITHUB_OUTPUT
+          
+          # Set environment variables for use in later steps
+          echo "BASTION_OS_USER=$BASTION_OS_USER" >> $GITHUB_ENV
+          echo "APP_OS_USER=$APP_OS_USER" >> $GITHUB_ENV
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -209,13 +238,17 @@ jobs:
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --format="value(instance.basename())" 2>/dev/null)
           
+          # Define the ProxyCommand using the correct bastion POSIX username
+          PROXY_COMMAND="'ssh -W %h:%p -q -o StrictHostKeyChecking=no ${{ env.BASTION_OS_USER }}@${{ env.BASTION_IP }}'"
+          SSH_COMMON_ARGS="-o ProxyCommand=$PROXY_COMMAND"
+          
           # Create the inventory file
           echo "# ${{ inputs.environment }} environment inventory file - Auto-generated for deployment" > ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[bastion]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-          echo "${{ env.BASTION_IP }} ansible_user=${{ env.BASTION_USER }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BASTION_IP }} ansible_user=${{ env.BASTION_OS_USER }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[backend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.APP_USER }} ansible_ssh_common_args=\"-o ProxyCommand='ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}'\"" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.APP_OS_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[frontend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
@@ -232,7 +265,7 @@ jobs:
                   --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
                 
                 if [ -n "$INSTANCE_INTERNAL_IP" ]; then
-                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.APP_USER }} ansible_ssh_common_args=\"-o ProxyCommand='ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}'\"" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.APP_OS_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 else
                   echo "# Could not resolve internal IP for $instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 fi
@@ -242,7 +275,7 @@ jobs:
             # If no instances found in the group, we may need to handle this differently
             # For now, add a placeholder based on subnet convention
             echo "# No running instances found in $FRONTEND_IG, using standard IP convention" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-            echo "10.0.2.3 ansible_user=${{ env.APP_USER }} ansible_ssh_common_args=\"-o ProxyCommand='ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}'\"" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+            echo "10.0.2.3 ansible_user=${{ env.APP_OS_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           fi
           
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
@@ -257,7 +290,7 @@ jobs:
           echo "Generated inventory file:"
           cat ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
-          # Debug: Show the exact line with the proxy command
+          # Debug: show the proxy command line to verify it's formatted correctly
           echo "Checking the proxy command line:"
           grep "ProxyCommand" ./ansible/inventory/${{ inputs.environment }}_temp.ini
         working-directory: .
