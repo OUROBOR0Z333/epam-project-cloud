@@ -108,9 +108,9 @@ jobs:
           # Clear any existing plan files to ensure we're seeing current state
           rm -f tfplan.binary *.plan
           
-          # Run terraform show with state file specifically to see current infrastructure
+          # Show current infrastructure state
           echo "Current infrastructure state:"
-          terraform show -no-color -state=terraform.tfstate
+          terraform show -no-color
           
           # List all resources
           echo "Resources in current state:"
