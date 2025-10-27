@@ -215,7 +215,7 @@ jobs:
           echo "${{ env.BASTION_IP }} ansible_user=${{ env.BASTION_USER }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[backend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.APP_USER }} ansible_ssh_common_args=\"-o ProxyCommand='ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}'\"" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.APP_USER }} ansible_ssh_common_args=\"-o ProxyCommand=\\\"ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}\\\"\"" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[frontend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
@@ -232,7 +232,7 @@ jobs:
                   --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
                 
                 if [ -n "$INSTANCE_INTERNAL_IP" ]; then
-                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.APP_USER }} ansible_ssh_common_args=\"-o ProxyCommand='ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}'\"" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.APP_USER }} ansible_ssh_common_args=\"-o ProxyCommand=\\\"ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}\\\"\"" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 else
                   echo "# Could not resolve internal IP for $instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 fi
@@ -242,7 +242,7 @@ jobs:
             # If no instances found in the group, we may need to handle this differently
             # For now, add a placeholder based on subnet convention
             echo "# No running instances found in $FRONTEND_IG, using standard IP convention" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-            echo "10.0.2.3 ansible_user=${{ env.APP_USER }} ansible_ssh_common_args=\"-o ProxyCommand='ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}'\"" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+            echo "10.0.2.3 ansible_user=${{ env.APP_USER }} ansible_ssh_common_args=\"-o ProxyCommand=\\\"ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}\\\"\"" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           fi
           
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
