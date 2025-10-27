@@ -270,6 +270,10 @@ jobs:
           echo "Bastion User: ${{ env.BASTION_USER }}"
           echo "App User: ${{ env.APP_USER }}"
           
+          pwd  # Debug: Check current directory
+          ls -la  # Debug: List files in current directory
+          ls -la inventory/  # Debug: List files in inventory directory
+          
           ansible-playbook \
             -i inventory/${{ inputs.environment }}_temp.ini \
             --extra-vars "db_host=${{ env.DB_HOST }} db_name=${{ env.DB_NAME }} db_user=${{ env.DB_USER }} db_password='${{ env.DB_PASSWORD }}' backend_url=http://${{ env.BACKEND_INTERNAL_IP }}:3000" \
