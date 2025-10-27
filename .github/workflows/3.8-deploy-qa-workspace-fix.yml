@@ -1,0 +1,143 @@
+name: Deploy Infrastructure to QA (Fixed Workspace Management)
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_approve:
+        description: 'Auto approve deployment'
+        required: true
+        default: false
+        type: boolean
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  GCP_ZONE: ${{ secrets.GCP_ZONE }}
+
+jobs:
+  authenticate:
+    runs-on: ubuntu-latest
+    outputs:
+      authenticated: ${{ steps.auth-test.outputs.authenticated }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Test GCP Authentication
+        id: auth-test
+        run: |
+          gcloud auth list
+          if gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} > /dev/null 2>&1; then
+            echo "authenticated=true" >> $GITHUB_OUTPUT
+            echo "Authentication successful"
+          else
+            echo "Authentication failed"
+            exit 1
+          fi
+
+  deploy-qa-infrastructure:
+    needs: authenticate
+    runs-on: ubuntu-latest
+    environment: qa
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+          terraform_wrapper: false
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Terraform Backend and Use QA Workspace
+        run: |
+          cd ./terraform
+          
+          # Initialize Terraform with existing backend configuration
+          terraform init
+          
+          # List existing workspaces
+          echo "Current workspaces:"
+          terraform workspace list
+          
+          # Check if QA workspace exists and switch to it, or create it if it doesn't exist
+          if terraform workspace list | grep -q "qa"; then
+            echo "Switching to existing QA workspace..."
+            terraform workspace select qa
+          else
+            echo "Creating new QA workspace..."
+            terraform workspace new qa
+          fi
+          
+          # Create deployment plan
+          terraform plan \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=${{ secrets.GCP_ZONE }}" \
+            -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
+            -out=tfplan.binary
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+
+      - name: Show Deployment Plan
+        run: |
+          cd ./terraform
+          terraform show -no-color tfplan.binary
+
+      - name: Terraform Apply
+        if: ${{ inputs.auto_approve == true }}
+        run: |
+          cd ./terraform
+          echo "Starting infrastructure deployment to QA environment..."
+          terraform apply -auto-approve tfplan.binary || {
+            echo "Terraform apply failed - cleaning up lock file"
+            gsutil ls gs://epam-bucket-gcp2025/terraform/state/qa.tflock && \
+            gsutil rm gs://epam-bucket-gcp2025/terraform/state/qa.tflock || true
+            exit 1
+          }
+          
+          echo "Infrastructure deployment completed to QA environment"
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+          
+      - name: Warning for Manual Apply Required
+        if: ${{ inputs.auto_approve == false }}
+        run: |
+          echo "Manual approval required. Deployment plan has been generated but not executed."
+          echo "To apply manually, run: terraform apply tfplan.binary in the terraform directory"
+          echo "This is the secure option to prevent unintended changes."
+
+      - name: Cleanup Plan File
+        if: ${{ always() }}
+        run: |
+          cd ./terraform
+          rm -f tfplan.binary
