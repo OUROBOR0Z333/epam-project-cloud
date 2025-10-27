@@ -93,11 +93,15 @@ jobs:
           echo "BACKEND_NAME=$BACKEND_NAME" >> $GITHUB_ENV
           
           # Get bastion external IP
+          set +e  # Temporarily disable exit-on-error
           BASTION_IP=$(gcloud compute instances describe "bastion-${{ inputs.environment }}" \
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --zone="${{ secrets.GCP_ZONE }}" \
-            --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null || echo "")
-          if [ -z "$BASTION_IP" ]; then
+            --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null)
+          gcloud_exit_code=$?
+          set -e  # Re-enable exit-on-error
+          
+          if [ $gcloud_exit_code -ne 0 ] || [ -z "$BASTION_IP" ]; then
             # Try to get from terraform state as fallback
             BASTION_IP=$(terraform output -raw bastion_external_ip 2>/dev/null || echo "")
           fi
@@ -117,10 +121,17 @@ jobs:
           else
             echo "Could not determine bastion service account, trying gcloud command..."
             # Try to get the service account from instance metadata
+            set +e  # Temporarily disable exit-on-error
             BASTION_USER=$(gcloud compute instances describe "bastion-${{ inputs.environment }}" \
               --project="${{ secrets.GCP_PROJECT_ID }}" \
               --zone="${{ secrets.GCP_ZONE }}" \
               --format="value(serviceAccounts[0].email)" 2>/dev/null | cut -d@ -f1)
+            gcloud_exit_code=$?
+            set -e  # Re-enable exit-on-error
+            
+            if [ $gcloud_exit_code -ne 0 ]; then
+              BASTION_USER=""
+            fi
             if [ -n "$BASTION_USER" ]; then
               echo "BASTION_USER=$BASTION_USER" >> $GITHUB_ENV
             else
@@ -129,10 +140,17 @@ jobs:
           fi
           
           # Get backend internal IP
+          set +e  # Temporarily disable exit-on-error
           BACKEND_INTERNAL_IP=$(gcloud compute instances describe "$BACKEND_NAME" \
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --zone="${{ secrets.GCP_ZONE }}" \
-            --format="value(networkInterfaces[0].networkIP)" 2>/dev/null || echo "10.0.2.2")
+            --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
+          gcloud_exit_code=$?
+          set -e  # Re-enable exit-on-error
+          
+          if [ $gcloud_exit_code -ne 0 ] || [ -z "$BACKEND_INTERNAL_IP" ]; then
+            BACKEND_INTERNAL_IP="10.0.2.2"  # Default fallback
+          fi
           echo "BACKEND_INTERNAL_IP=$BACKEND_INTERNAL_IP" >> $GITHUB_ENV
           
           # Get app service account for backend/frontend use
