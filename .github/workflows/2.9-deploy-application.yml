@@ -193,8 +193,11 @@ jobs:
           # First, get the frontend instance from the managed instance group
           echo "Creating inventory file for ${{ inputs.environment }} environment..."
           
-          # Ensure the inventory directory exists
+          # Ensure the inventory directory exists with more explicit approach
+          pwd  # Print current directory for debugging
+          ls -la  # List directory contents for debugging
           mkdir -p ./ansible/inventory
+          ls -la ./ansible/  # List ansible directory contents for debugging
           
           # Get the instance group information
           FRONTEND_IG="frontend-group-${{ inputs.environment }}"
