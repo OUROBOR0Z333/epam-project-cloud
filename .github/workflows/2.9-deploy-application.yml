@@ -54,7 +54,8 @@ jobs:
           terraform workspace list
           
           # Check if workspace exists and switch to it, or create it if it doesn't exist
-          if terraform workspace list | grep -q "^${{ inputs.environment }}$"; then
+          # Remove asterisks and extra spaces, then check for the environment name
+          if terraform workspace list | sed 's/^[* ] *//' | grep -q "^${{ inputs.environment }}$"; then
             echo "Switching to existing ${{ inputs.environment }} workspace..."
             terraform workspace select ${{ inputs.environment }}
           else
