@@ -187,20 +187,17 @@ jobs:
             --format="value(instance.basename())" 2>/dev/null)
           
           # Create the inventory file
-          cat > ./ansible/inventory/${{ inputs.environment }}_temp.ini << EOF
-# ${{ inputs.environment }} environment inventory file - Auto-generated for deployment
-
-[bastion]
-${{ env.BASTION_IP }} ansible_user=${{ env.BASTION_USER }}
-
-[backend]
-${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.APP_USER }} ansible_ssh_common_args='-o ProxyCommand="ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}"'
-
-[frontend]
-EOF
+          echo "# ${{ inputs.environment }} environment inventory file - Auto-generated for deployment" > ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[bastion]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BASTION_IP }} ansible_user=${{ env.BASTION_USER }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[backend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.APP_USER }} ansible_ssh_common_args='-o ProxyCommand=\"ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}\"'" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[frontend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
           # Add all frontend instances to the inventory
-          if [ -n "$INSTANCES" ]; then
+          if [ -n "$INSTANCES" ]; do
             for instance in $INSTANCES; do
               # Get the internal IP for each instance
               INSTANCE_INTERNAL_IP=$(gcloud compute instances describe "$instance" \
