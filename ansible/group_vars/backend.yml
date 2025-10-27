@@ -1,0 +1,7 @@
+# Variables for backend instances
+
+db_host: "/cloudsql/epamgcpdeployment2:us-central1:movie-db-qa"
+db_name: "movie_db"
+db_user: "app_user"
+db_password: "your_secure_password_here"
+backend_port: 3000

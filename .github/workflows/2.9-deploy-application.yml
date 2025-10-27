@@ -1,0 +1,251 @@
+name: 2.9-deploy-application
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment (qa/prod)'
+        required: true
+        default: 'qa'
+        type: choice
+        options:
+          - qa
+          - prod
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  GCP_ZONE: ${{ secrets.GCP_ZONE }}
+
+jobs:
+  application-deployment:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform
+
+      - name: Configure Terraform Workspace
+        run: |
+          cd ./terraform
+          # List existing workspaces
+          echo "Current workspaces:"
+          terraform workspace list
+          
+          # Check if workspace exists and switch to it, or create it if it doesn't exist
+          if terraform workspace list | grep -q "^${{ inputs.environment }}$"; then
+            echo "Switching to existing ${{ inputs.environment }} workspace..."
+            terraform workspace select ${{ inputs.environment }}
+          else
+            echo "Creating new ${{ inputs.environment }} workspace..."
+            terraform workspace new ${{ inputs.environment }}
+          fi
+        working-directory: ./terraform
+
+      - name: Get Infrastructure Information
+        run: |
+          cd ./terraform
+          
+          # Select appropriate workspace
+          terraform workspace select ${{ inputs.environment }}
+          
+          echo "Getting infrastructure information..."
+          
+          # Get database information
+          DB_HOST=$(terraform output -raw database_connection_name 2>/dev/null)
+          if [ -z "$DB_HOST" ]; then
+            # If terraform output fails, use a default value
+            DB_HOST="${{ secrets.GCP_PROJECT_ID }}:us-central1:movie-db-${{ inputs.environment }}"
+          fi
+          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+          
+          DB_NAME=$(terraform output -raw database_name 2>/dev/null || echo "movie_db")
+          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
+          
+          DB_USER=$(terraform output -raw database_user 2>/dev/null || echo "app_user")
+          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+          
+          # For password, we need to get it from a more reliable source
+          DB_PASSWORD=$(terraform output -raw database_password 2>/dev/null || echo "${{ secrets.DB_ROOT_PASSWORD }}")
+          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+          
+          # Get backend instance name and internal IP
+          BACKEND_NAME=$(terraform output -raw backend_instance_name 2>/dev/null || echo "backend-${{ inputs.environment }}")
+          echo "BACKEND_NAME=$BACKEND_NAME" >> $GITHUB_ENV
+          
+          # Get bastion external IP
+          BASTION_IP=$(gcloud compute instances describe "bastion-${{ inputs.environment }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --zone="${{ secrets.GCP_ZONE }}" \
+            --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null || echo "")
+          if [ -z "$BASTION_IP" ]; then
+            # Try to get from terraform state as fallback
+            BASTION_IP=$(terraform output -raw bastion_external_ip 2>/dev/null || echo "")
+          fi
+          if [ -n "$BASTION_IP" ]; then
+            echo "BASTION_IP=$BASTION_IP" >> $GITHUB_ENV
+          else
+            echo "Could not determine bastion IP"
+            exit 1
+          fi
+          
+          # Get bastion service account email to use as SSH user
+          BASTION_SA=$(terraform output -raw bastion_service_account 2>/dev/null || echo "")
+          if [ -n "$BASTION_SA" ]; then
+            # Extract user part from service account email (before the @)
+            BASTION_USER=$(echo "$BASTION_SA" | cut -d'@' -f1)
+            echo "BASTION_USER=$BASTION_USER" >> $GITHUB_ENV
+          else
+            echo "Could not determine bastion service account, trying gcloud command..."
+            # Try to get the service account from instance metadata
+            BASTION_USER=$(gcloud compute instances describe "bastion-${{ inputs.environment }}" \
+              --project="${{ secrets.GCP_PROJECT_ID }}" \
+              --zone="${{ secrets.GCP_ZONE }}" \
+              --format="value(serviceAccounts[0].email)" 2>/dev/null | cut -d'@' -f1)
+            if [ -n "$BASTION_USER" ]; then
+              echo "BASTION_USER=$BASTION_USER" >> $GITHUB_ENV
+            else
+              echo "BASTION_USER=ubuntu" >> $GITHUB_ENV
+            fi
+          fi
+          
+          # Get backend internal IP
+          BACKEND_INTERNAL_IP=$(gcloud compute instances describe "$BACKEND_NAME" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --zone="${{ secrets.GCP_ZONE }}" \
+            --format="value(networkInterfaces[0].networkIP)" 2>/dev/null || echo "10.0.2.2")
+          echo "BACKEND_INTERNAL_IP=$BACKEND_INTERNAL_IP" >> $GITHUB_ENV
+          
+          # Get app service account for backend/frontend use
+          APP_SA=$(terraform output -raw app_service_account 2>/dev/null || echo "")
+          if [ -n "$APP_SA" ]; then
+            APP_USER=$(echo "$APP_SA" | cut -d'@' -f1)
+            echo "APP_USER=$APP_USER" >> $GITHUB_ENV
+          else
+            echo "APP_USER=ubuntu" >> $GITHUB_ENV
+          fi
+          
+          echo "Infrastructure details retrieved successfully"
+        working-directory: ./terraform
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Configure SSH for Ansible
+        run: |
+          mkdir -p ~/.ssh
+          # Configure SSH to work with our target hosts
+          echo "Host *" > ~/.ssh/config
+          echo "    StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "    UserKnownHostsFile /dev/null" >> ~/.ssh/config
+          echo "    ConnectTimeout 10" >> ~/.ssh/config
+
+      - name: Create dynamic inventory for application deployment
+        run: |
+          # Create temporary inventory file for this deployment
+          # First, get the frontend instance from the managed instance group
+          echo "Creating inventory file for ${{ inputs.environment }} environment..."
+          
+          # Get the instance group information
+          FRONTEND_IG="frontend-group-${{ inputs.environment }}"
+          
+          # List instances in the managed instance group
+          INSTANCES=$(gcloud compute instance-groups list-instances "$FRONTEND_IG" \
+            --zone="${{ secrets.GCP_ZONE }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --format="value(instance.basename())" 2>/dev/null)
+          
+          # Create the inventory file
+          cat > ./ansible/inventory/${{ inputs.environment }}_temp.ini << EOF
+# ${{ inputs.environment }} environment inventory file - Auto-generated for deployment
+
+[bastion]
+${{ env.BASTION_IP }} ansible_user=${{ env.BASTION_USER }}
+
+[backend]
+${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.APP_USER }} ansible_ssh_common_args='-o ProxyCommand="ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}"'
+
+[frontend]
+EOF
+          
+          # Add all frontend instances to the inventory
+          if [ -n "$INSTANCES" ]; then
+            for instance in $INSTANCES; do
+              # Get the internal IP for each instance
+              INSTANCE_INTERNAL_IP=$(gcloud compute instances describe "$instance" \
+                --zone="${{ secrets.GCP_ZONE }}" \
+                --project="${{ secrets.GCP_PROJECT_ID }}" \
+                --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
+              
+              if [ -n "$INSTANCE_INTERNAL_IP" ]; then
+                echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.APP_USER }} ansible_ssh_common_args='-o ProxyCommand=\"ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}\"'" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+              else
+                echo "# Could not resolve internal IP for $instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+              fi
+            done
+          else
+            # If no instances found in the group, we may need to handle this differently
+            # For now, add a placeholder based on subnet convention
+            echo "# No running instances found in $FRONTEND_IG, using standard IP convention" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+            echo "10.0.2.3 ansible_user=${{ env.APP_USER }} ansible_ssh_common_args='-o ProxyCommand=\"ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}\"'" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          fi
+          
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[database]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "# Database is a Cloud SQL instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "# Connection name: ${{ env.DB_HOST }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[all:vars]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "ansible_python_interpreter=/usr/bin/python3" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          
+          echo "Generated inventory file:"
+          cat ./ansible/inventory/${{ inputs.environment }}_temp.ini
+        working-directory: .
+
+      - name: Run Ansible Playbook for Application Deployment
+        run: |
+          echo "Running Ansible playbook to deploy the application..."
+          echo "Backend URL: http://${{ env.BACKEND_INTERNAL_IP }}:3000"
+          echo "Database: ${{ env.DB_HOST }} - ${{ env.DB_NAME }}"
+          echo "Bastion User: ${{ env.BASTION_USER }}"
+          echo "App User: ${{ env.APP_USER }}"
+          
+          ansible-playbook \
+            -i inventory/${{ inputs.environment }}_temp.ini \
+            --extra-vars "db_host=${{ env.DB_HOST }} db_name=${{ env.DB_NAME }} db_user=${{ env.DB_USER }} db_password='${{ env.DB_PASSWORD }}' backend_url=http://${{ env.BACKEND_INTERNAL_IP }}:3000" \
+            playbooks/site.yml
+        working-directory: ./ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"

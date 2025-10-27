@@ -16,10 +16,20 @@ The following secrets need to be configured in your GitHub repository:
 - **Format**: Valid GCP region identifier
 - **Example**: `us-central1`
 
+### GCP_ZONE
+- **Description**: The zone where resources will be deployed
+- **Format**: Valid GCP zone identifier
+- **Example**: `us-central1-a`
+
 ### GCP_SA_KEY
 - **Description**: Service account key JSON for authentication
 - **Format**: JSON string containing the service account credentials
 - **Example**: `{"type": "service_account", "project_id": "...", ...}`
+
+### DB_ROOT_PASSWORD
+- **Description**: Root password for the database
+- **Format**: String (secure password)
+- **Example**: `your_secure_password_here`
 
 ### TERRAFORM_STATE_BUCKET
 - **Description**: The name of the GCS bucket for storing Terraform state
@@ -58,3 +68,7 @@ The `TERRAFORM_STATE_BUCKET` secret must follow these rules:
 **Solution**: Ensure your service account has the necessary roles:
 - `roles/storage.admin` (for bucket creation and management)
 - `roles/editor` or equivalent permissions for other GCP resources
+
+### Issue: "Could not determine bastion IP" in application deployment workflows
+**Cause**: The infrastructure may not be deployed yet or workspace names don't match
+**Solution**: Ensure infrastructure is deployed first and workspace names match between Terraform and workflow parameters
