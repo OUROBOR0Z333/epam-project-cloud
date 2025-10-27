@@ -47,8 +47,8 @@ jobs:
         working-directory: ./terraform
 
       - name: Configure Terraform Workspace
+        working-directory: ./terraform
         run: |
-          cd ./terraform
           # List existing workspaces
           echo "Current workspaces:"
           terraform workspace list
@@ -61,12 +61,10 @@ jobs:
             echo "Creating new ${{ inputs.environment }} workspace..."
             terraform workspace new ${{ inputs.environment }}
           fi
-        working-directory: ./terraform
 
       - name: Get Infrastructure Information
+        working-directory: ./terraform
         run: |
-          cd ./terraform
-          
           # Select appropriate workspace
           terraform workspace select ${{ inputs.environment }}
           
