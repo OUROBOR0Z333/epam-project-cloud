@@ -98,7 +98,7 @@ jobs:
       - name: Show Destroy Plan
         run: |
           cd ./terraform
-          terraform show -no-color -destroy tfplan.binary
+          terraform show -no-color tfplan.binary
 
       - name: Terraform Destroy
         if: ${{ inputs.auto_approve == true }}
