@@ -1,4 +1,4 @@
-name: Deploy Infrastructure to QA (Fixed Workspace Management)
+name: Deploy Infrastructure to QA Environment (Fixed Workspace Management)
 
 on:
   workflow_dispatch:
