@@ -109,6 +109,41 @@ jobs:
           TF_VAR_zone: ${{ secrets.GCP_ZONE }}
           TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
 
+      - name: Import Existing Resources to State
+        run: |
+          cd ./terraform
+          
+          # Check if service accounts already exist in GCP but not in state, then import them
+          
+          # Check if app service account exists in GCP
+          if gcloud iam service-accounts describe app-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+            # Check if it already exists in state
+            if ! terraform state show module.app_instances.google_service_account.app_instances >/dev/null 2>&1; then
+              echo "Importing existing app service account to Terraform state..."
+              terraform import module.app_instances.google_service_account.app_instances projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/app-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+              echo "App service account imported successfully"
+            else
+              echo "App service account already exists in Terraform state"
+            fi
+          else
+            echo "App service account does not exist in GCP, will be created during deployment"
+          fi
+          
+          # Check if bastion service account exists in GCP
+          if gcloud iam service-accounts describe bastion-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+            # Check if it already exists in state
+            if ! terraform state show module.bastion.google_service_account.bastion >/dev/null 2>&1; then
+              echo "Importing existing bastion service account to Terraform state..."
+              terraform import module.bastion.google_service_account.bastion projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/bastion-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+              echo "Bastion service account imported successfully"
+            else
+              echo "Bastion service account already exists in Terraform state"
+            fi
+          else
+            echo "Bastion service account does not exist in GCP, will be created during deployment"
+          fi
+
+
       - name: Terraform Validate
         run: |
           cd ./terraform
