@@ -256,6 +256,10 @@ jobs:
           
           echo "Generated inventory file:"
           cat ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          
+          # Debug: Show the exact line with the proxy command
+          echo "Checking the proxy command line:"
+          grep "ProxyCommand" ./ansible/inventory/${{ inputs.environment }}_temp.ini
         working-directory: .
 
       - name: Run Ansible Playbook for Application Deployment
