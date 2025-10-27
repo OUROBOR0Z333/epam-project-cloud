@@ -125,8 +125,8 @@ jobs:
         run: |
           cd ./terraform
           echo "Starting infrastructure destruction for ${{ inputs.environment }} environment..."
-          terraform destroy -auto-approve tfplan.binary || {
-            echo "Terraform destroy failed - cleaning up lock file"
+          terraform apply -auto-approve tfplan.binary || {
+            echo "Terraform apply failed - cleaning up lock file"
             gsutil ls gs://epam-bucket-gcp2025/terraform/state/${{ inputs.environment }}.tflock && \
             gsutil rm gs://epam-bucket-gcp2025/terraform/state/${{ inputs.environment }}.tflock || true
             exit 1
