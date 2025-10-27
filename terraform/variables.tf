@@ -43,5 +43,5 @@ variable "backend_machine_type" {
 variable "vm_image" {
   description = "Self-link of the image each VM should boot from"
   type        = string
-  default     = ""   # root module sets it in locals
+  default     = "" # root module sets it in locals
 }

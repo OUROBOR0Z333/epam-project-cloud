@@ -7,6 +7,6 @@ terraform {
   backend "gcs" {
     bucket = "epam-bucket-gcp2025"
     prefix = "terraform/state"
-    }
-# backend "local" {}
+  }
+  # backend "local" {}
 }
