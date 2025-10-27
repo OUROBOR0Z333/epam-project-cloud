@@ -220,20 +220,24 @@ jobs:
           echo "[frontend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
           # Add all frontend instances to the inventory
-          if [ -n "$INSTANCES" ]; do
-            for instance in $INSTANCES; do
-              # Get the internal IP for each instance
-              INSTANCE_INTERNAL_IP=$(gcloud compute instances describe "$instance" \
-                --zone="${{ secrets.GCP_ZONE }}" \
-                --project="${{ secrets.GCP_PROJECT_ID }}" \
-                --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
-              
-              if [ -n "$INSTANCE_INTERNAL_IP" ]; then
-                echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.APP_USER }} ansible_ssh_common_args='-o ProxyCommand=\"ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}\"'" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-              else
-                echo "# Could not resolve internal IP for $instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          if [ -n "$INSTANCES" ]; then
+            # Use while loop with here-string to safely handle gcloud output
+            while IFS= read -r instance; do
+              # Skip empty lines
+              if [ -n "$instance" ]; then
+                # Get the internal IP for each instance
+                INSTANCE_INTERNAL_IP=$(gcloud compute instances describe "$instance" \
+                  --zone="${{ secrets.GCP_ZONE }}" \
+                  --project="${{ secrets.GCP_PROJECT_ID }}" \
+                  --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
+                
+                if [ -n "$INSTANCE_INTERNAL_IP" ]; then
+                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.APP_USER }} ansible_ssh_common_args='-o ProxyCommand=\"ssh -W %h:%p -o StrictHostKeyChecking=no ${{ env.BASTION_USER }}@${{ env.BASTION_IP }}\"'" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                else
+                  echo "# Could not resolve internal IP for $instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                fi
               fi
-            done
+            done <<< "$INSTANCES"
           else
             # If no instances found in the group, we may need to handle this differently
             # For now, add a placeholder based on subnet convention
