@@ -73,9 +73,8 @@ jobs:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Configure Terraform Backend and Use QA Workspace
+        working-directory: ./terraform
         run: |
-          cd ./terraform
-          
           # Initialize Terraform with existing backend configuration
           terraform init
           
@@ -101,14 +100,14 @@ jobs:
             -out=tfplan.binary
 
       - name: Show Deployment Plan
+        working-directory: ./terraform
         run: |
-          cd ./terraform
           terraform show -no-color tfplan.binary
 
       - name: Terraform Apply
         if: ${{ inputs.auto_approve == true }}
+        working-directory: ./terraform
         run: |
-          cd ./terraform
           echo "Starting infrastructure deployment to QA environment..."
           terraform apply -auto-approve tfplan.binary || {
             echo "Terraform apply failed - cleaning up lock file"
@@ -128,6 +127,6 @@ jobs:
 
       - name: Cleanup Plan File
         if: ${{ always() }}
+        working-directory: ./terraform
         run: |
-          cd ./terraform
           rm -f tfplan.binary
