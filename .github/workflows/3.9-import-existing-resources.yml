@@ -1,0 +1,150 @@
+name: Import Existing Resources to State
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to import resources for (qa/prod)'
+        required: true
+        default: 'qa'
+        type: choice
+        options:
+          - qa
+          - prod
+      resource_type:
+        description: 'Type of resource to import'
+        required: true
+        default: 'service-account'
+        type: choice
+        options:
+          - service-account
+          - all
+      auto_approve:
+        description: 'Auto approve import operation'
+        required: true
+        default: false
+        type: boolean
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  GCP_ZONE: ${{ secrets.GCP_ZONE }}
+
+jobs:
+  authenticate:
+    runs-on: ubuntu-latest
+    outputs:
+      authenticated: ${{ steps.auth-test.outputs.authenticated }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Test GCP Authentication
+        id: auth-test
+        run: |
+          gcloud auth list
+          if gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} > /dev/null 2>&1; then
+            echo "authenticated=true" >> $GITHUB_OUTPUT
+            echo "Authentication successful"
+          else
+            echo "Authentication failed"
+            exit 1
+          fi
+
+  import-resources:
+    needs: authenticate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+          terraform_wrapper: false
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Import Existing Resources
+        run: |
+          cd ./terraform
+          
+          # Initialize Terraform
+          terraform init
+          
+          # Select the appropriate workspace
+          if terraform workspace list | grep -q "${{ inputs.environment }}"; then
+            echo "Switching to existing workspace: ${{ inputs.environment }}"
+            terraform workspace select ${{ inputs.environment }}
+          else
+            echo "Creating new workspace: ${{ inputs.environment }}"
+            terraform workspace new ${{ inputs.environment }}
+          fi
+          
+          # Check if resources already exist in state
+          RESOURCE_IMPORTED=false
+          
+          if [ "${{ inputs.resource_type }}" = "service-account" ] || [ "${{ inputs.resource_type }}" = "all" ]; then
+            # Check if service account exists in GCP
+            if gcloud iam service-accounts describe "app-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+              # Check if it already exists in state
+              if ! terraform state show "module.app_instances.google_service_account.app_instances" >/dev/null 2>&1; then
+                echo "Importing app service account..."
+                terraform import -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -var="region=${{ secrets.GCP_REGION }}" -var="zone=${{ secrets.GCP_ZONE }}" -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" "module.app_instances.google_service_account.app_instances" "projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/app-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+                RESOURCE_IMPORTED=true
+                echo "Service account imported successfully"
+              else
+                echo "Service account already exists in state"
+              fi
+            else
+              echo "Service account does not exist in GCP, skipping import"
+            fi
+            
+            # Also check for bastion service account
+            if gcloud iam service-accounts describe "bastion-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+              if ! terraform state show "module.bastion.google_service_account.bastion" >/dev/null 2>&1; then
+                echo "Importing bastion service account..."
+                terraform import -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -var="region=${{ secrets.GCP_REGION }}" -var="zone=${{ secrets.GCP_ZONE }}" -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" "module.bastion.google_service_account.bastion" "projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/bastion-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+                RESOURCE_IMPORTED=true
+                echo "Bastion service account imported successfully"
+              else
+                echo "Bastion service account already exists in state"
+              fi
+            else
+              echo "Bastion service account does not exist in GCP, skipping import"
+            fi
+          fi
+          
+          if [ "$RESOURCE_IMPORTED" = true ]; then
+            echo "Resource import completed successfully"
+          else
+            echo "No resources needed to be imported"
+          fi
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
