@@ -112,7 +112,7 @@ jobs:
           BASTION_SA=$(terraform output -raw bastion_service_account 2>/dev/null || echo "")
           if [ -n "$BASTION_SA" ]; then
             # Extract user part from service account email (before the @)
-            BASTION_USER=$(echo "$BASTION_SA" | cut -d'@' -f1)
+            BASTION_USER=$(echo "$BASTION_SA" | cut -d@ -f1)
             echo "BASTION_USER=$BASTION_USER" >> $GITHUB_ENV
           else
             echo "Could not determine bastion service account, trying gcloud command..."
@@ -120,7 +120,7 @@ jobs:
             BASTION_USER=$(gcloud compute instances describe "bastion-${{ inputs.environment }}" \
               --project="${{ secrets.GCP_PROJECT_ID }}" \
               --zone="${{ secrets.GCP_ZONE }}" \
-              --format="value(serviceAccounts[0].email)" 2>/dev/null | cut -d'@' -f1)
+              --format="value(serviceAccounts[0].email)" 2>/dev/null | cut -d@ -f1)
             if [ -n "$BASTION_USER" ]; then
               echo "BASTION_USER=$BASTION_USER" >> $GITHUB_ENV
             else
@@ -138,7 +138,7 @@ jobs:
           # Get app service account for backend/frontend use
           APP_SA=$(terraform output -raw app_service_account 2>/dev/null || echo "")
           if [ -n "$APP_SA" ]; then
-            APP_USER=$(echo "$APP_SA" | cut -d'@' -f1)
+            APP_USER=$(echo "$APP_SA" | cut -d@ -f1)
             echo "APP_USER=$APP_USER" >> $GITHUB_ENV
           else
             echo "APP_USER=ubuntu" >> $GITHUB_ENV
