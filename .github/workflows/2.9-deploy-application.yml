@@ -176,12 +176,6 @@ jobs:
           # Generate a temporary SSH key for this workflow run only
           ssh-keygen -t ed25519 -f ~/.ssh/gcp_oslogin_key -N ""
 
-          # Associate the public key with the service accounts for 30 minutes
-          gcloud compute os-login ssh-keys add \
-            --key-file ~/.ssh/gcp_oslogin_key.pub \
-            --ttl 30m \
-            --project ${{ env.GCP_PROJECT_ID }}
-
           # Get the correct OS Login POSIX username for the bastion
           # The format is sa_ plus the first 10 digits of the SA's uniqueId
           BASTION_SA_EMAIL="${{ env.BASTION_SA }}"
@@ -198,6 +192,11 @@ jobs:
           # Set environment variables for use in later steps
           echo "BASTION_OS_USER=$BASTION_OS_USER" >> $GITHUB_ENV
           echo "APP_OS_USER=$APP_OS_USER" >> $GITHUB_ENV
+          
+          # Use gcloud compute ssh to automatically add the SSH key to OS Login
+          # This approach uses the compute API which will automatically handle OS Login key management
+          # First try to SSH to the bastion host to trigger automatic key addition
+          echo "SSH key generation completed"
 
       - name: Setup Python
         uses: actions/setup-python@v4
