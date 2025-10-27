@@ -115,24 +115,31 @@ jobs:
           # Get bastion service account email to use as SSH user
           BASTION_SA=$(terraform output -raw bastion_service_account 2>/dev/null || echo "")
           if [ -n "$BASTION_SA" ]; then
-            # Extract user part from service account email (before the @)
+            # Store the full email address for use in OS Login key lookup
+            echo "BASTION_SA=$BASTION_SA" >> $GITHUB_ENV
+            # Extract user part from service account email (before the @) for legacy uses
             BASTION_USER=$(echo "$BASTION_SA" | cut -d@ -f1)
             echo "BASTION_USER=$BASTION_USER" >> $GITHUB_ENV
           else
             echo "Could not determine bastion service account, trying gcloud command..."
             # Try to get the service account from instance metadata
             set +e  # Temporarily disable exit-on-error
-            BASTION_USER=$(gcloud compute instances describe "bastion-${{ inputs.environment }}" \
+            BASTION_SA=$(gcloud compute instances describe "bastion-${{ inputs.environment }}" \
               --project="${{ secrets.GCP_PROJECT_ID }}" \
               --zone="${{ secrets.GCP_ZONE }}" \
-              --format="value(serviceAccounts[0].email)" 2>/dev/null | cut -d@ -f1)
+              --format="value(serviceAccounts[0].email)" 2>/dev/null)
             gcloud_exit_code=$?
             set -e  # Re-enable exit-on-error
             
-            if [ $gcloud_exit_code -ne 0 ]; then
-              BASTION_USER=""
+            if [ $gcloud_exit_code -ne 0 ] || [ -z "$BASTION_SA" ]; then
+              BASTION_SA=""
             fi
-            if [ -n "$BASTION_USER" ]; then
+            
+            if [ -n "$BASTION_SA" ]; then
+              # Store the full email address for use in OS Login key lookup
+              echo "BASTION_SA=$BASTION_SA" >> $GITHUB_ENV
+              # Extract user part for other uses
+              BASTION_USER=$(echo "$BASTION_SA" | cut -d@ -f1)
               echo "BASTION_USER=$BASTION_USER" >> $GITHUB_ENV
             else
               echo "BASTION_USER=ubuntu" >> $GITHUB_ENV
