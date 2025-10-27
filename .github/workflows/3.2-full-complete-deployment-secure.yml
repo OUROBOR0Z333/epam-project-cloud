@@ -87,14 +87,22 @@ jobs:
           # Initialize Terraform
           terraform init -backend-config="prefix=${{ inputs.environment }}/terraform/state"
           
-          # Create or select the appropriate workspace
-          if terraform workspace list | grep -q "^* ${{ inputs.environment }}$"; then
+          # List existing workspaces
+          echo "Current workspaces:"
+          terraform workspace list
+          
+          # Check if the target workspace exists and switch to it, or create it if it doesn't exist
+          if terraform workspace list | grep -q "${{ inputs.environment }}"; then
             echo "Switching to existing workspace: ${{ inputs.environment }}"
             terraform workspace select ${{ inputs.environment }}
           else
             echo "Creating new workspace: ${{ inputs.environment }}"
             terraform workspace new ${{ inputs.environment }}
           fi
+          
+          # Verify we are on the correct workspace
+          echo "Current workspace:"
+          terraform workspace show
         env:
           TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
           TF_VAR_region: ${{ secrets.GCP_REGION }}
