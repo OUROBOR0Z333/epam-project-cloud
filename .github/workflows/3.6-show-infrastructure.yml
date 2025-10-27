@@ -105,6 +105,9 @@ jobs:
             fi
           fi
           
+          # Clear any existing plan files to ensure we're seeing current state
+          rm -f tfplan.binary
+          
           # Show current infrastructure state
           echo "Current infrastructure state:"
           terraform show -no-color
