@@ -1,0 +1,167 @@
+name: Improved Destroy Infrastructure in Default Workspace
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_approve:
+        description: 'Auto approve destruction (use with extreme caution - this will delete infrastructure!)'
+        required: true
+        default: false
+        type: boolean
+      max_attempts:
+        description: 'Maximum number of attempts to destroy resources (handles dependencies)'
+        required: true
+        default: '3'
+        type: string
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  GCP_ZONE: ${{ secrets.GCP_ZONE }}
+
+jobs:
+  authenticate:
+    runs-on: ubuntu-latest
+    outputs:
+      authenticated: ${{ steps.auth-test.outputs.authenticated }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Test GCP Authentication
+        id: auth-test
+        run: |
+          gcloud auth list
+          if gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} > /dev/null 2>&1; then
+            echo "authenticated=true" >> $GITHUB_OUTPUT
+            echo "Authentication successful"
+          else
+            echo "Authentication failed"
+            exit 1
+          fi
+
+  destroy-default-infrastructure:
+    needs: authenticate
+    runs-on: ubuntu-latest
+    environment: development
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+          terraform_wrapper: false
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Terraform Backend and Use Default Workspace
+        run: |
+          cd ./terraform
+          
+          # Initialize Terraform with existing backend configuration
+          terraform init
+          
+          # Ensure we're using the default workspace where original infrastructure was created
+          echo "Current workspaces:"
+          terraform workspace list
+          
+          echo "Switching to default workspace..."
+          terraform workspace select default
+          
+          echo "Found state in default workspace. Preparing to destroy..."
+          
+          # Create destroy plan
+          terraform plan -destroy -out=tfplan.binary
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+
+      - name: Show Destroy Plan
+        run: |
+          cd ./terraform
+          terraform show -no-color tfplan.binary
+
+      - name: Attempt Infrastructure Destruction with Retry
+        if: ${{ inputs.auto_approve == true }}
+        run: |
+          cd ./terraform
+          
+          MAX_ATTEMPTS=${{ inputs.max_attempts }}
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Starting infrastructure destruction attempt $ATTEMPT/$MAX_ATTEMPTS in default workspace..."
+            
+            if terraform apply -auto-approve tfplan.binary; then
+              echo "Infrastructure destruction completed successfully on attempt $ATTEMPT"
+              exit 0
+            else
+              echo "Terraform apply failed on attempt $ATTEMPT"
+              
+              # Check if it's the Service Networking Connection error
+              if terraform show tfplan.binary 2>/dev/null | grep -q "Service Networking Connection"; then
+                echo "Detected Service Networking Connection dependency issue. This is expected."
+                echo "Waiting 2 minutes before next attempt to allow resources to fully delete..."
+                sleep 120
+              else
+                echo "This appears to be a different error. Investigating..."
+              fi
+            fi
+            
+            # Increment attempt counter
+            ATTEMPT=$((ATTEMPT + 1))
+            
+            # Regenerate plan in case some resources have been destroyed
+            echo "Regenerating plan for attempt $ATTEMPT..."
+            terraform plan -destroy -out=tfplan.binary
+          done
+          
+          echo "Infrastructure destruction completed after $MAX_ATTEMPTS attempts."
+          echo "Some resources might still be pending deletion in the cloud provider."
+          
+          # Try to clean up any remaining lock files
+          gsutil ls gs://epam-bucket-gcp2025/terraform/state/default.tflock && \
+          gsutil rm gs://epam-bucket-gcp2025/terraform/state/default.tflock || true
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+          
+      - name: Warning for Manual Destroy Required
+        if: ${{ inputs.auto_approve == false }}
+        run: |
+          echo "Manual approval required. Destroy plan has been generated but not executed."
+          echo "To destroy manually, run: terraform apply -auto-approve tfplan.binary in the terraform directory"
+          echo "WARNING: This will permanently delete infrastructure. Please review the plan details carefully."
+
+      - name: Cleanup Plan File
+        if: ${{ always() }}
+        run: |
+          cd ./terraform
+          rm -f tfplan.binary
