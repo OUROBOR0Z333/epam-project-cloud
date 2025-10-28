@@ -13,8 +13,7 @@
     db_name: "{{ db_name | default('movie_db') }}"
     db_user: "{{ db_user | default('app_user') }}"
     db_password: "{{ db_password | default('your_secure_password_here') }}"
-    db_connection_name_default: "epamgcpdeployment2:us-central1:movie-db-qa"
-    db_connection_name: "{{ db_connection_name | default(db_connection_name_default) }}"
+    db_connection_name: "{{ db_connection_name_var | default('epamgcpdeployment2:us-central1:movie-db-qa') }}"
   pre_tasks:
     - name: Ensure ACL support is present
       apt:
