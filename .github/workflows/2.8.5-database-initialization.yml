@@ -60,7 +60,10 @@ jobs:
     - name: Terraform Select/Create Workspace
       run: |
         cd terraform
-        terraform workspace select ${{ env.TF_WORKSPACE }} || terraform workspace new ${{ env.TF_WORKSPACE }}
+        # The TF_WORKSPACE environment variable already sets the workspace
+        # Use terraform workspace show to confirm the workspace is correctly selected
+        terraform workspace list
+        # No need to manually select since TF_WORKSPACE is already set
 
     - name: Get Terraform Outputs
       id: tf-outputs
