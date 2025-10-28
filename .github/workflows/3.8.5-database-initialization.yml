@@ -129,18 +129,20 @@ jobs:
         done
         
         # Create the inventory file with proper variable substitution
-        cat > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini << 'EOF'
-[backend]
-$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+        # Using printf to avoid heredoc indentation issues in YAML
+        {
+        echo "[backend]"
+        echo "$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'"
+        echo ""
+        echo "[backend:vars]"
+        echo "ansible_python_interpreter=/usr/bin/python3"
+        echo "db_connection_name=$DB_HOST"
+        echo "db_host=127.0.0.1"
+        echo "db_name=$DB_NAME"
+        echo "db_user=$DB_USER"
+        echo "db_password=$DB_PASSWORD"
+        } > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
 
-[backend:vars]
-ansible_python_interpreter=/usr/bin/python3
-db_connection_name=$DB_HOST
-db_host=127.0.0.1
-db_name=$DB_NAME
-db_user=$DB_USER
-db_password=$DB_PASSWORD
-EOF
 
         echo 'Inventory generated:'
         cat ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
