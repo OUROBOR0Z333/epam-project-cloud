@@ -26,9 +26,13 @@
     group: "{{ app_group }}"
     mode: '0755'
 
+- name: Set Cloud SQL Proxy URL
+  set_fact:
+    cloud_sql_proxy_url: "https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/v{{ cloud_sql_proxy_version }}/cloud-sql-proxy.linux.{{ cloud_sql_proxy_arch }}"
+
 - name: Download Cloud SQL Proxy
   get_url:
-    url: "{{ 'https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/v' + cloud_sql_proxy_version + '/cloud-sql-proxy.linux.' + cloud_sql_proxy_arch }}"
+    url: "{{ cloud_sql_proxy_url }}"
     dest: "{{ cloud_sql_proxy_install_dir }}/cloud-sql-proxy"
     mode: '0755'
     checksum: >-
