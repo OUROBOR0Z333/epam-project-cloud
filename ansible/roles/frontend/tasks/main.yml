@@ -1,0 +1,66 @@
+---
+# tasks/main.yml for frontend role
+
+- name: Ensure app group exists
+  group:
+    name: "{{ app_group }}"
+    system: yes
+    state: present
+
+- name: Ensure app user exists
+  user:
+    name: "{{ app_user }}"
+    group: "{{ app_group }}"
+    shell: /bin/bash
+    home: "/home/{{ app_user }}"
+    create_home: yes
+    state: present
+
+- name: Install Node.js and npm
+  apt:
+    name: 
+      - nodejs
+      - npm
+      - git
+    state: present
+    update_cache: yes
+
+- name: Install PM2 globally
+  npm:
+    name: pm2
+    global: yes
+    state: present
+
+- name: Create application directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Clone frontend application
+  git:
+    repo: https://github.com/aljoveza/devops-rampup.git
+    dest: "{{ app_dir }}/movie-analyst-ui"
+    force: yes
+    depth: 1
+  become_user: "{{ app_user }}"
+  notify: restart-frontend
+
+- name: Install frontend dependencies
+  npm:
+    path: "{{ app_dir }}/movie-analyst-ui/movie-analyst-ui"
+    state: present
+  become_user: "{{ app_user }}"
+  notify: restart-frontend
+
+- name: Create frontend environment file
+  template:
+    src: frontend.env.j2
+    dest: "{{ app_dir }}/movie-analyst-ui/movie-analyst-ui/.env"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+  become_user: "{{ app_user }}"
+  notify: restart-frontend

@@ -1,0 +1,7 @@
+---
+# Default variables for backend role
+cloud_sql_proxy_version: "2.14.0"
+cloud_sql_proxy_arch: "{{ ansible_architecture | regex_replace('x86_64','amd64') }}"
+# Note: In a production environment, you should set the actual checksum
+cloud_sql_proxy_sha256: ""
+cloud_sql_proxy_install_dir: /usr/local/bin

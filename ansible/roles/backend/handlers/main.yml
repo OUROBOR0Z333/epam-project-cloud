@@ -1,0 +1,13 @@
+---
+# handlers/main.yml for backend role
+
+- name: restart-backend
+  command: pm2 restart movie-analyst-backend
+  become_user: "{{ app_user }}"
+
+- name: restart-cloud-sql-proxy
+  systemd:
+    name: cloud-sql-proxy
+    state: restarted
+    enabled: yes
+    daemon_reload: yes

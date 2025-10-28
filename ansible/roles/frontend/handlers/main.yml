@@ -1,0 +1,6 @@
+---
+# handlers/main.yml for frontend role
+
+- name: restart-frontend
+  command: pm2 restart movie-analyst-frontend
+  become_user: "{{ app_user }}"
