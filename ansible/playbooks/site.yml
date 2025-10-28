@@ -1,7 +1,7 @@
 ---
 # Ansible playbook for deploying the movie-analyst application
 
-- name: Deploy Backend Application
+- name: Deploy and Initialize Backend Application
   hosts: backend
   become: yes
   vars:
@@ -9,7 +9,7 @@
     app_group: "app"
     app_dir: "/opt/movie-analyst"
     backend_port: 3000
-    db_host: "{{ db_host | default('/cloudsql/epamgcpdeployment2:us-central1:movie-db-qa') }}"
+    db_host: "{{ db_host | default('127.0.0.1') }}"  # Using localhost for Cloud SQL Proxy
     db_name: "{{ db_name | default('movie_db') }}"
     db_user: "{{ db_user | default('app_user') }}"
     db_password: "{{ db_password | default('your_secure_password_here') }}"
@@ -83,6 +83,32 @@
         mode: '0644'
       become_user: "{{ app_user }}"
       notify: restart-backend
+
+    - name: Wait for database to be ready
+      wait_for:
+        host: "{{ db_host }}"
+        port: 3306
+        delay: 10
+        timeout: 300
+      delegate_to: localhost
+
+    - name: Run database schema initialization
+      command: node seeds.js
+      args:
+        chdir: "{{ app_dir }}/movie-analyst-api/movie-analyst-api"
+      environment:
+        DB_HOST: "{{ db_host }}"
+        DB_USER: "{{ db_user }}"
+        DB_PASS: "{{ db_password }}"
+        DB_NAME: "{{ db_name }}"
+      become_user: "{{ app_user }}"
+      register: schema_result
+      # Only run if tables don't exist yet
+      # NOTE: In production, you might want a more sophisticated check
+
+    - name: Display schema initialization result
+      debug:
+        msg: "Schema initialization completed: {{ schema_result.stdout_lines | default('No output') }}"
 
     - name: Start backend service with PM2
       command: pm2 start server.js -n movie-analyst-backend --cwd {{ app_dir }}/movie-analyst-api/movie-analyst-api

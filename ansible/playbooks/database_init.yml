@@ -1,0 +1,30 @@
+---
+# Ansible playbook for database schema initialization
+# This would be run after application deployment but before starting the backend
+
+- name: Initialize Database Schema and Data
+  hosts: backend
+  become: yes
+  vars:
+    app_user: "app"
+    app_dir: "/opt/movie-analyst"
+    db_host: "{{ db_host | default('localhost') }}"
+    db_name: "{{ db_name | default('movie_db') }}"
+    db_user: "{{ db_user | default('app_user') }}"
+    db_password: "{{ db_password | default('your_secure_password_here') }}"
+  tasks:
+    - name: Run database schema initialization
+      command: node seeds.js
+      args:
+        chdir: "{{ app_dir }}/movie-analyst-api/movie-analyst-api"
+      environment:
+        DB_HOST: "{{ db_host }}"
+        DB_USER: "{{ db_user }}"
+        DB_PASS: "{{ db_password }}"
+        DB_NAME: "{{ db_name }}"
+      become_user: "{{ app_user }}"
+      register: schema_result
+
+    - name: Display schema initialization result
+      debug:
+        msg: "Schema initialization completed: {{ schema_result.stdout_lines | default('No output') }}"
