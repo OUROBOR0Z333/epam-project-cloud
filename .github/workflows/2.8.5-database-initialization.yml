@@ -12,8 +12,7 @@ on:
           - qa
           - prod
 
-env:
-  TF_WORKSPACE: ${{ inputs.environment || 'qa' }}
+
 
 jobs:
   deploy-database-init:
@@ -57,32 +56,24 @@ jobs:
           -backend-config="bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
           -backend-config="prefix=terraform/state/${{ env.TF_WORKSPACE }}/terraform"
 
-    - name: Terraform Select/Create Workspace
+    - name: Configure Terraform workspace
       run: |
         cd terraform
-        # The TF_WORKSPACE environment variable already sets the workspace
-        # Use terraform workspace show to confirm the workspace is correctly selected
-        terraform workspace list
-        # No need to manually select since TF_WORKSPACE is already set
+        unset TF_WORKSPACE   # let terraform handle workspaces itself
+        terraform workspace select -or-create=true ${{ inputs.environment }}
 
-    - name: Get Terraform and GCP Outputs
+    - name: Get Terraform Outputs
       id: tf-outputs
       run: |
         cd terraform
         # Refresh the state to ensure we have the latest outputs
         terraform refresh
-        # Capture each output separately to handle potential errors
+        # Now that workspace is properly set, try to get the outputs
         DB_HOST=$(terraform output -raw database_connection_name 2>/dev/null || echo "")
         DB_NAME=$(terraform output -raw database_name 2>/dev/null || echo "")
         DB_USER=$(terraform output -raw database_user 2>/dev/null || echo "")
         DB_PASSWORD=$(terraform output -raw database_password 2>/dev/null || echo "")
-        
-        # If Terraform output for backend IP fails, get it from gcloud directly
         BACKEND_IP=$(terraform output -raw backend_internal_ip 2>/dev/null || echo "")
-        if [ -z "$BACKEND_IP" ]; then
-          echo "Warning: backend_internal_ip not found in Terraform outputs, getting from gcloud"
-          BACKEND_IP=$(gcloud compute instances describe backend-${{ env.TF_WORKSPACE }} --zone=us-central1-a --project=${{ secrets.GCP_PROJECT_ID }} --format="value(networkInterfaces[0].networkIP)" 2>/dev/null || echo "")
-        fi
         
         # Only write to GITHUB_OUTPUT if the values exist
         if [ -n "$DB_HOST" ]; then
@@ -116,7 +107,7 @@ jobs:
         if [ -n "$BACKEND_IP" ]; then
           echo "backend_ip=$BACKEND_IP" >> $GITHUB_OUTPUT
         else
-          echo "Error: backend_internal_ip not found in Terraform outputs or via gcloud"
+          echo "Error: backend_internal_ip not found in Terraform outputs"
           exit 1
         fi
 
