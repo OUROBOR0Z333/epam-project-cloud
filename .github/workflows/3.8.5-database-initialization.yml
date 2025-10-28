@@ -129,7 +129,7 @@ jobs:
         done
         
         # Create the inventory file with proper variable substitution
-        cat > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini << EOF
+        cat > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini << 'EOF'
 [backend]
 $BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
