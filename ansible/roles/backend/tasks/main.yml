@@ -28,7 +28,7 @@
 
 - name: Set Cloud SQL Proxy URL
   set_fact:
-    cloud_sql_proxy_url: "https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/v{{ cloud_sql_proxy_version }}/cloud-sql-proxy.{{ cloud_sql_proxy_arch }}"
+    cloud_sql_proxy_url: "https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/v{{ cloud_sql_proxy_version }}/cloud-sql-proxy.linux.{{ cloud_sql_proxy_arch }}"
 
 - name: Download Cloud SQL Proxy
   get_url:
