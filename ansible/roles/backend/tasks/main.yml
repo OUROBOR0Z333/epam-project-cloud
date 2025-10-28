@@ -33,7 +33,6 @@
       v{{ cloud_sql_proxy_version }}/cloud-sql-proxy.linux.{{ cloud_sql_proxy_arch }}
     dest: "{{ cloud_sql_proxy_install_dir }}/cloud-sql-proxy"
     mode: '0755'
-    force: yes
     creates: "{{ cloud_sql_proxy_install_dir }}/cloud-sql-proxy"
     checksum: >-
       {{ cloud_sql_proxy_sha256 | length | int > 0
@@ -88,8 +87,7 @@
 
 - name: Start / reload backend with PM2
   command: >
-    pm2 {{ ( pm2_backend_process_exists.rc == 0 ) | ternary('reload', 'start') }}
-    server.js --name movie-analyst-backend --cwd {{ app_dir }}/movie-analyst-api
+    {{ (pm2_backend_process_exists.rc == 0) | ternary('pm2 reload movie-analyst-backend --update-env', 'pm2 start server.js --name movie-analyst-backend --cwd ' + app_dir + '/movie-analyst-api') }}
   become_user: "{{ app_user }}"
   register: pm2_backend_started
   changed_when: pm2_backend_started.rc == 0
