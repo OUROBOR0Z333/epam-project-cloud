@@ -60,65 +60,61 @@ jobs:
       id: tf-outputs
       run: |
         cd terraform
+        set -euo pipefail  # abort on any unset var or non-zero exit
+        
         # Refresh the state to ensure we have the latest outputs
         terraform refresh
+        
         # Now that workspace is properly set, try to get the outputs
-        DB_HOST=$(terraform output -raw database_connection_name 2>/dev/null || echo "")
-        DB_NAME=$(terraform output -raw database_name 2>/dev/null || echo "")
-        DB_USER=$(terraform output -raw database_user 2>/dev/null || echo "")
-        DB_PASSWORD=$(terraform output -raw database_password 2>/dev/null || echo "")
-        BACKEND_IP=$(terraform output -raw backend_internal_ip 2>/dev/null || echo "")
+        DB_HOST=$(terraform output -raw database_connection_name)
+        DB_NAME=$(terraform output -raw database_name)
+        DB_USER=$(terraform output -raw database_user)
+        DB_PASSWORD=$(terraform output -raw database_password)
+        BACKEND_IP=$(terraform output -raw backend_internal_ip)
         
-        # Only write to GITHUB_OUTPUT if the values exist
-        if [ -n "$DB_HOST" ]; then
-          echo "db_host=$DB_HOST" >> $GITHUB_OUTPUT
-        else
-          echo "Error: database_connection_name not found in Terraform outputs"
-          exit 1
-        fi
+        # Write all outputs to GITHUB_OUTPUT
+        echo "db_host=$DB_HOST" >> $GITHUB_OUTPUT
+        echo "db_name=$DB_NAME" >> $GITHUB_OUTPUT
+        echo "db_user=$DB_USER" >> $GITHUB_OUTPUT
+        echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
+        echo "backend_ip=$BACKEND_IP" >> $GITHUB_OUTPUT
         
-        if [ -n "$DB_NAME" ]; then
-          echo "db_name=$DB_NAME" >> $GITHUB_OUTPUT
-        else
-          echo "Error: database_name not found in Terraform outputs"
-          exit 1
-        fi
-        
-        if [ -n "$DB_USER" ]; then
-          echo "db_user=$DB_USER" >> $GITHUB_OUTPUT
-        else
-          echo "Error: database_user not found in Terraform outputs"
-          exit 1
-        fi
-        
-        if [ -n "$DB_PASSWORD" ]; then
-          echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
-        else
-          echo "Error: database_password not found in Terraform outputs"
-          exit 1
-        fi
-        
-        if [ -n "$BACKEND_IP" ]; then
-          echo "backend_ip=$BACKEND_IP" >> $GITHUB_OUTPUT
-        else
-          echo "Error: backend_internal_ip not found in Terraform outputs"
-          exit 1
-        fi
+        # Sanity-check variables
+        for v in DB_HOST DB_NAME DB_USER DB_PASSWORD BACKEND_IP; do
+          printf '%-15s %s\n' "$v" "${!v}"
+          [ -z "${!v}" ] && { echo "::error ::$v is empty"; exit 1; }
+        done
 
     - name: Get OS Login SSH Username for Backend
       id: backend-user
       run: |
+        set -euo pipefail  # abort on any unset var or non-zero exit
+        
         echo "Environment variable: ${{ env.TF_WORKSPACE }}"
         echo "Project ID secret: ${{ secrets.GCP_PROJECT_ID }}"
         SERVICE_ACCOUNT_EMAIL="app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
         echo "Service account to impersonate: $SERVICE_ACCOUNT_EMAIL"
+        
         BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="$SERVICE_ACCOUNT_EMAIL")
+        
+        # Verify the SSH user was retrieved
+        if [ -z "$BACKEND_SSH_USER" ]; then
+          echo "::error ::Failed to retrieve OS Login SSH username"
+          exit 1
+        fi
+        
         echo "BACKEND_USER=$BACKEND_SSH_USER" >> $GITHUB_OUTPUT
+        
+        # Confirm the value
+        echo "Retrieved SSH username: $BACKEND_SSH_USER"
 
     - name: Create Ansible Inventory
       run: |
+        set -euo pipefail  # abort on any unset var or non-zero exit
+        
         mkdir -p ansible/inventory
-        # Create the inventory file with proper variable substitution
+        
+        # Get values from previous steps
         BACKEND_IP="${{ steps.tf-outputs.outputs.backend_ip }}"
         BACKEND_USER="${{ steps.backend-user.outputs.BACKEND_USER }}"
         DB_HOST="${{ steps.tf-outputs.outputs.db_host }}"
@@ -126,21 +122,39 @@ jobs:
         DB_USER="${{ steps.tf-outputs.outputs.db_user }}"
         DB_PASSWORD="${{ steps.tf-outputs.outputs.db_password }}"
         
+        # Sanity-check variables before writing the inventory file
+        for v in BACKEND_IP BACKEND_USER DB_HOST DB_NAME DB_USER DB_PASSWORD; do
+          printf '%-15s %s\n' "$v" "${!v}"
+          [ -z "${!v}" ] && { echo "::error ::$v is empty"; exit 1; }
+        done
+        
+        # Create the inventory file with proper variable substitution
         cat > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini << EOF
-        [backend]
-        ${BACKEND_IP} ansible_user=${BACKEND_USER} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+[backend]
+$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
-        [backend:vars]
-        ansible_python_interpreter=/usr/bin/python3
-        db_connection_name=${DB_HOST}
-        db_host=127.0.0.1
-        db_name=${DB_NAME}
-        db_user=${DB_USER}
-        db_password=${DB_PASSWORD}
-        EOF
+[backend:vars]
+ansible_python_interpreter=/usr/bin/python3
+db_connection_name=$DB_HOST
+db_host=127.0.0.1
+db_name=$DB_NAME
+db_user=$DB_USER
+db_password=$DB_PASSWORD
+EOF
+
+        echo 'Inventory generated:'
+        cat ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+
+    - name: Validate Ansible Inventory
+      run: |
+        set -euo pipefail
+        ansible-inventory -i ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini --list
+      env:
+        ANSIBLE_HOST_KEY_CHECKING: False
 
     - name: Run Database Schema Initialization with Ansible
       run: |
+        set -euo pipefail
         ansible-playbook -i ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini ansible/playbooks/database_init.yml \
           --extra-vars "db_host=127.0.0.1" \
           --extra-vars "db_name=${{ steps.tf-outputs.outputs.db_name }}" \
