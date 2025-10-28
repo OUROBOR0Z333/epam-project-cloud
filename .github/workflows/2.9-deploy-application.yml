@@ -183,39 +183,29 @@ jobs:
       - name: Configure SSH for GCP OS Login
         id: os-login-key
         run: |
-          # Generate a temporary SSH key for this workflow run only
+          # Step 1: Generate a temporary SSH key for this workflow run only
+          echo "Generating ephemeral SSH key..."
           ssh-keygen -t ed25519 -f ~/.ssh/gcp_oslogin_key -N ""
 
-          # Get the correct OS Login POSIX username for the bastion
-          # The format is sa_ plus the first 10 digits of the SA's uniqueId
-          BASTION_SA_EMAIL="${{ env.BASTION_SA }}"
-          BASTION_UNIQUE_ID=$(gcloud iam service-accounts describe "$BASTION_SA_EMAIL" --format="value(uniqueId)")
-          BASTION_OS_USER="sa_$(echo $BASTION_UNIQUE_ID | cut -c 1-10)"
-          echo "BASTION_OS_USER=$BASTION_OS_USER" >> $GITHUB_OUTPUT
+          # Step 2: Add the public key to the OS Login profile of the service account RUNNING this workflow.
+          # We remove the --account flag. This associates the key with the current authenticated user (the workflow SA).
+          echo "Uploading ephemeral public key to this workflow's SA profile..."
+          gcloud compute os-login ssh-keys add \
+            --key-file ~/.ssh/gcp_oslogin_key.pub \
+            --ttl 30m
 
-          # Get the correct OS Login POSIX username for the app instances
-          APP_SA_EMAIL="${{ env.APP_SA }}"
-          APP_UNIQUE_ID=$(gcloud iam service-accounts describe "$APP_SA_EMAIL" --format="value(uniqueId)")
-          APP_OS_USER="sa_$(echo $APP_UNIQUE_ID | cut -c 1-10)"
-          echo "APP_OS_USER=$APP_OS_USER" >> $GITHUB_OUTPUT
+          # Step 3: Get the correct OS Login POSIX username for the WORKFLOW service account.
+          # This is the only user we need to connect as.
+          echo "Determining OS Login username for the workflow's SA..."
+          WORKFLOW_SA_EMAIL=$(gcloud config get-value account)
+          WORKFLOW_UNIQUE_ID=$(gcloud iam service-accounts describe "$WORKFLOW_SA_EMAIL" --format="value(uniqueId)")
+          OS_LOGIN_USER="sa_$(echo $WORKFLOW_UNIQUE_ID | cut -c 1-10)"
+          echo "OS_LOGIN_USER=$OS_LOGIN_USER" >> $GITHUB_OUTPUT
           
-          # Set environment variables for use in later steps
-          echo "BASTION_OS_USER=$BASTION_OS_USER" >> $GITHUB_ENV
-          echo "APP_OS_USER=$APP_OS_USER" >> $GITHUB_ENV
+          # Set environment variable for use in later steps
+          echo "OS_LOGIN_USER=$OS_LOGIN_USER" >> $GITHUB_ENV
           
-          # Add the SSH key to OS Login for the bastion service account
-          gcloud compute os-login ssh-keys add \
-            --key-file ~/.ssh/gcp_oslogin_key.pub \
-            --ttl 30m \
-            --account "$BASTION_SA_EMAIL"
-          
-          # Add the SSH key to OS Login for the app service account
-          gcloud compute os-login ssh-keys add \
-            --key-file ~/.ssh/gcp_oslogin_key.pub \
-            --ttl 30m \
-            --account "$APP_SA_EMAIL"
-          
-          echo "SSH key generation and OS Login registration completed"
+          echo "SSH key generation and OS Login registration completed for user: $OS_LOGIN_USER"
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -256,17 +246,17 @@ jobs:
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --format="value(instance.basename())" 2>/dev/null)
           
-          # Define the ProxyCommand using the correct bastion POSIX username
-          PROXY_COMMAND="'ssh -W %h:%p -q -o StrictHostKeyChecking=no ${{ env.BASTION_OS_USER }}@${{ env.BASTION_IP }}'"
+          # Define the ProxyCommand using the single, correct POSIX username
+          PROXY_COMMAND="'ssh -W %h:%p -q -o StrictHostKeyChecking=no ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}'"
           SSH_COMMON_ARGS="-o ProxyCommand=$PROXY_COMMAND"
           
           # Create the inventory file
           echo "# ${{ inputs.environment }} environment inventory file - Auto-generated for deployment" > ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[bastion]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-          echo "${{ env.BASTION_IP }} ansible_user=${{ env.BASTION_OS_USER }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BASTION_IP }} ansible_user=${{ env.OS_LOGIN_USER }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[backend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.APP_OS_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[frontend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
@@ -283,7 +273,7 @@ jobs:
                   --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
                 
                 if [ -n "$INSTANCE_INTERNAL_IP" ]; then
-                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.APP_OS_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 else
                   echo "# Could not resolve internal IP for $instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 fi
@@ -293,7 +283,7 @@ jobs:
             # If no instances found in the group, we may need to handle this differently
             # For now, add a placeholder based on subnet convention
             echo "# No running instances found in $FRONTEND_IG, using standard IP convention" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-            echo "10.0.2.3 ansible_user=${{ env.APP_OS_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+            echo "10.0.2.3 ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           fi
           
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
@@ -304,6 +294,7 @@ jobs:
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[all:vars]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "ansible_python_interpreter=/usr/bin/python3" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
           echo "Generated inventory file:"
           cat ./ansible/inventory/${{ inputs.environment }}_temp.ini
@@ -334,8 +325,8 @@ jobs:
           echo "
           [Step 2: Testing Hop 1 - Direct Connection to Bastion]
           "
-          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.BASTION_OS_USER }}@${{ env.BASTION_IP }} 'echo \"SUCCESS: Connected to Bastion\"'"
-          ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.BASTION_OS_USER }}@${{ env.BASTION_IP }} 'echo "SUCCESS: Connected to Bastion"'
+          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }} 'echo \"SUCCESS: Connected to Bastion\"'"
+          ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }} 'echo "SUCCESS: Connected to Bastion"'
           SSH_EXIT_CODE=$?
           echo "--> Bastion SSH command exited with code: $SSH_EXIT_CODE"
 
@@ -343,9 +334,9 @@ jobs:
           echo "
           [Step 3: Testing Hop 2 - Proxied Connection to Backend]
           "
-          PROXY_COMMAND="ssh -vvv -i ~/.ssh/gcp_oslogin_key -W %h:%p ${{ env.BASTION_OS_USER }}@${{ env.BASTION_IP }}"
-          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key -o 'ProxyCommand=${PROXY_COMMAND}' ${{ env.APP_OS_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo \"SUCCESS: Connected to Backend\"'"
-          ssh -vvv -i ~/.ssh/gcp_oslogin_key -o "ProxyCommand=${PROXY_COMMAND}" ${{ env.APP_OS_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo "SUCCESS: Connected to Backend"'
+          PROXY_COMMAND="ssh -vvv -i ~/.ssh/gcp_oslogin_key -W %h:%p ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}"
+          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key -o 'ProxyCommand=${PROXY_COMMAND}' ${{ env.OS_LOGIN_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo \"SUCCESS: Connected to Backend\"'"
+          ssh -vvv -i ~/.ssh/gcp_oslogin_key -o "ProxyCommand=${PROXY_COMMAND}" ${{ env.OS_LOGIN_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo "SUCCESS: Connected to Backend"'
           SSH_EXIT_CODE=$?
           echo "--> Backend SSH command exited with code: $SSH_EXIT_CODE"
 
@@ -356,8 +347,7 @@ jobs:
           echo "Running Ansible playbook to deploy the application..."
           echo "Backend URL: http://${{ env.BACKEND_INTERNAL_IP }}:3000"
           echo "Database: ${{ env.DB_HOST }} - ${{ env.DB_NAME }}"
-          echo "Bastion OS Login User: ${{ env.BASTION_OS_USER }}"
-          echo "App OS Login User: ${{ env.APP_OS_USER }}"
+          echo "Workflow OS Login User: ${{ env.OS_LOGIN_USER }}"
           
           pwd  # Debug: Check current directory
           ls -la  # Debug: List files in current directory
