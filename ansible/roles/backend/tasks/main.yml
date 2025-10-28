@@ -35,7 +35,7 @@
     mode: '0755'
     creates: "{{ cloud_sql_proxy_install_dir }}/cloud-sql-proxy"
     checksum: >-
-      {{ cloud_sql_proxy_sha256 | length | int > 0
+      {{ (cloud_sql_proxy_sha256 | length > 0)
          | ternary('sha256:' + cloud_sql_proxy_sha256, omit) }}
 
 - name: Install Cloud SQL Proxy service file
