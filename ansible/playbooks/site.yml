@@ -51,11 +51,12 @@
         global: yes
         state: present
 
-    - name: Install Cloud SQL Proxy
-      apt:
-        name: cloud-sql-proxy
-        state: present
-        update_cache: yes
+    - name: Download and install Cloud SQL Proxy
+      get_url:
+        url: https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/v2.14.0/cloud_sql_proxy.linux.amd64
+        dest: /usr/local/bin/cloud-sql-proxy
+        mode: '0755'
+        force: yes
 
     - name: Create application directory
       file:
@@ -75,7 +76,7 @@
           [Service]
           Type=simple
           User={{ app_user }}
-          ExecStart=/usr/bin/cloud-sql-proxy {{ db_connection_name }}
+          ExecStart=/usr/local/bin/cloud-sql-proxy {{ db_connection_name }}
           Restart=always
           RestartSec=10
 
