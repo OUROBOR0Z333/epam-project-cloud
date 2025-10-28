@@ -2,22 +2,16 @@ name: '2.8.5 - Database Initialization'
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to deploy to'
-        required: true
-        default: 'qa'
-        type: choice
-        options:
-          - qa
-          - prod
+
+env:
+  TF_WORKSPACE: qa
 
 
 
 jobs:
   deploy-database-init:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: qa
     
     steps:
     - name: Checkout code
@@ -59,13 +53,14 @@ jobs:
     - name: Configure Terraform workspace
       run: |
         cd terraform
-        unset TF_WORKSPACE   # let terraform handle workspaces itself
-        terraform workspace select -or-create=true ${{ inputs.environment }}
+        export TF_WORKSPACE=${{ env.TF_WORKSPACE }}
+        terraform workspace select -or-create=true ${{ env.TF_WORKSPACE }}
 
     - name: Get Terraform Outputs
       id: tf-outputs
       run: |
         cd terraform
+        export TF_WORKSPACE=${{ env.TF_WORKSPACE }}
         # Refresh the state to ensure we have the latest outputs
         terraform refresh
         # Now that workspace is properly set, try to get the outputs
@@ -114,7 +109,11 @@ jobs:
     - name: Get OS Login SSH Username for Backend
       id: backend-user
       run: |
-        BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com")
+        echo "Environment variable: ${{ env.TF_WORKSPACE }}"
+        echo "Project ID secret: ${{ secrets.GCP_PROJECT_ID }}"
+        SERVICE_ACCOUNT_EMAIL="app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+        echo "Service account to impersonate: $SERVICE_ACCOUNT_EMAIL"
+        BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="$SERVICE_ACCOUNT_EMAIL")
         echo "BACKEND_USER=$BACKEND_SSH_USER" >> $GITHUB_OUTPUT
 
     - name: Create Ansible Inventory
