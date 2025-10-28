@@ -1,0 +1,54 @@
+# Database Initialization Validation Problem
+
+## Issue
+Database initialization workflow (2.8.5-database-initialization.yml) fails during OS-Login impersonation step with:
+```
+ERROR: (gcloud.compute.os-login.describe-profile) NOT_FOUND: Failed to impersonate [backend-sa-qa@...]. Make sure the account that's trying to impersonate it has access to the service account itself and the "roles/iam.serviceAccountTokenCreator" role. Not found; Gaia id not found for email backend-sa-qa@...iam.gserviceaccount.com.
+```
+
+## Root Cause
+The workflow was attempting to impersonate a service account (`backend-sa-qa@...`) that doesn't exist in the GCP project. Terraform configuration in `modules/app-instances/main.tf` creates a shared service account (`app-sa-qa@...`) that is used by both backend and frontend instances, not a dedicated backend service account.
+
+## Validation Results
+### Infrastructure Status (as of 2025-10-28)
+- ✅ Compute instances exist: `backend-qa`, `bastion-qa`, `frontend-qa-vpr8`
+- ✅ Cloud SQL instance exists: `movie-db-qa` with private IP 10.3.30.5  
+- ✅ Service accounts exist: `app-sa-qa@...`, `bastion-sa-qa@...`
+- ❌ Missing service account: `backend-sa-qa@...` (referenced by workflow but doesn't exist)
+
+### Terraform Configuration Analysis
+- Both backend and frontend VMs reference `google_service_account.app_instances` in `modules/app-instances/main.tf`
+- The service account that actually exists is `app-sa-qa@...` with the correct IAM bindings
+- No dedicated `backend-sa-qa@...` service account is created by Terraform
+
+## Solution Applied
+Changed the workflow from:
+```yaml
+- name: Get OS Login SSH Username for Backend
+  run: |
+    BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="backend-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com")
+```
+
+To:
+```yaml
+- name: Get OS Login SSH Username for Backend
+  run: |
+    BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com")
+```
+
+## Validation Command
+```bash
+# Verify the correct service account exists and can be impersonated
+gcloud compute os-login describe-profile \
+  --format="value(response.posixAccounts.username)" \
+  --impersonate-service-account="app-sa-qa@epamgcpdeployment2.iam.gserviceaccount.com"
+```
+
+## Additional Requirements
+The service account `app-sa-qa@...` must have:
+- `roles/compute.osLogin` (or `osLoginExternalUser`)
+- `roles/iam.serviceAccountUser` on itself
+- `roles/iam.serviceAccountTokenCreator` for the impersonating account
+
+## Outcome
+This fix aligns the workflow with the actual resources created by Terraform, resolving the NOT_FOUND error and allowing the database initialization workflow to proceed successfully.
