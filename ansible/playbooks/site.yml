@@ -51,12 +51,14 @@
         global: yes
         state: present
 
-    - name: Download and install Cloud SQL Proxy
+    - name: Download Cloud SQL Proxy
       get_url:
         url: https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/v2.14.0/cloud_sql_proxy.linux.amd64
         dest: /usr/local/bin/cloud-sql-proxy
         mode: '0755'
         force: yes
+        # In a production setup, you should add checksum verification for security
+        # checksum: "sha256:{{ cloud_sql_proxy_sha256 }}"
 
     - name: Create application directory
       file:
@@ -66,22 +68,9 @@
         group: "{{ app_group }}"
         mode: '0755'
 
-    - name: Create Cloud SQL Proxy service file
-      copy:
-        content: |
-          [Unit]
-          Description=Cloud SQL Proxy
-          After=network.target
-
-          [Service]
-          Type=simple
-          User={{ app_user }}
-          ExecStart=/usr/local/bin/cloud-sql-proxy {{ db_connection_name }}
-          Restart=always
-          RestartSec=10
-
-          [Install]
-          WantedBy=multi-user.target
+    - name: Install Cloud SQL Proxy service file
+      template:
+        src: cloud-sql-proxy.service.j2
         dest: /etc/systemd/system/cloud-sql-proxy.service
         owner: root
         group: root

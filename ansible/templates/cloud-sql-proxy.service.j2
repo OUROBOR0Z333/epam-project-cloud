@@ -1,0 +1,12 @@
+[Unit]
+Description=Cloud SQL Auth Proxy
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloud-sql-proxy {{ db_connection_name }}
+Restart=always
+User={{ app_user }}
+
+[Install]
+WantedBy=multi-user.target
