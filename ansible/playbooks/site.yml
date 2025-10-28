@@ -8,7 +8,7 @@
     app_user: "app"
     app_group: "app"
     app_dir: "/opt/movie-analyst"
-    backend_port: "{{ backend_port | default(3000) }}"
+    backend_port: 3000
     db_host: "{{ db_host | default('/cloudsql/epamgcpdeployment2:us-central1:movie-db-qa') }}"
     db_name: "{{ db_name | default('movie_db') }}"
     db_user: "{{ db_user | default('app_user') }}"
@@ -112,7 +112,7 @@
     app_user: "app"
     app_group: "app"
     app_dir: "/opt/movie-analyst"
-    frontend_port: "{{ frontend_port | default(3030) }}"
+    frontend_port: 3030
     backend_url: "{{ backend_url | default('http://10.0.2.2:3000') }}"
   tasks:
     - name: Ensure ACL support is present
