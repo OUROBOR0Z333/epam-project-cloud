@@ -271,13 +271,13 @@ jobs:
           echo "[bastion]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "${{ env.BASTION_IP }} ansible_host=${{ env.BASTION_IP }} ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-          echo "[backend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[backend-servers]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
-          # Define the ProxyCommand for connecting through the bastion
-          PROXY_COMMAND="ssh -i ~/.ssh/gcp_oslogin_key -W %h:%p -q -o StrictHostKeyChecking=no ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}"
-          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"-o ProxyCommand=\\\"$PROXY_COMMAND\\\" -o ControlMaster=no -o ControlPersist=no\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          # Define the ProxyCommand for connecting through the bastion (with doubled % for proper ini parsing)
+          PROXY_COMMAND="ssh -i ~/.ssh/gcp_oslogin_key -W %%h:%%p -q -o StrictHostKeyChecking=no ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}"
+          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"-o ProxyCommand='$PROXY_COMMAND'\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-          echo "[frontend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[frontend-servers]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
           # Add all frontend instances to the inventory
           if [ -n "$INSTANCES" ]; then
@@ -292,7 +292,7 @@ jobs:
                   --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
                 
                 if [ -n "$INSTANCE_INTERNAL_IP" ]; then
-                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"-o ProxyCommand=\\\"$PROXY_COMMAND\\\" -o ControlMaster=no -o ControlPersist=no\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"-o ProxyCommand='$PROXY_COMMAND'\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 else
                   echo "# Could not resolve internal IP for $instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 fi
@@ -301,7 +301,33 @@ jobs:
           else
             # If no instances found in the group, default to a standard IP
             echo "# No running instances found in $FRONTEND_IG, using standard IP convention" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-            echo "10.0.2.3 ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"-o ProxyCommand=\\\"$PROXY_COMMAND\\\" -o ControlMaster=no -o ControlPersist=no\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+            echo "10.0.2.3 ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"-o ProxyCommand='$PROXY_COMMAND'\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          fi
+          
+          # Create aliases for the special groups [backend] and [frontend] to avoid name conflicts
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[backend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BACKEND_INTERNAL_IP }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[frontend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          if [ -n "$INSTANCES" ]; then
+            # Use while loop with here-string to safely handle gcloud output
+            while IFS= read -r instance; do
+              # Skip empty lines
+              if [ -n "$instance" ]; then
+                # Get the internal IP for each instance
+                INSTANCE_INTERNAL_IP=$(gcloud compute instances describe "$instance" \
+                  --zone="${{ secrets.GCP_ZONE }}" \
+                  --project="${{ secrets.GCP_PROJECT_ID }}" \
+                  --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
+                
+                if [ -n "$INSTANCE_INTERNAL_IP" ]; then
+                  echo "$INSTANCE_INTERNAL_IP" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                fi
+              fi
+            done <<< "$INSTANCES"
+          else
+            echo "10.0.2.3" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           fi
           
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
@@ -411,5 +437,4 @@ jobs:
         working-directory: ./ansible
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
-          ANSIBLE_SSH_ARGS: "-o ControlMaster=no -o ControlPersist=no -o StrictHostKeyChecking=no -o ConnectTimeout=10"
           ANSIBLE_CONFIG: "ansible.cfg"
