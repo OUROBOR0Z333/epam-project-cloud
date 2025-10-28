@@ -33,7 +33,6 @@
       v{{ cloud_sql_proxy_version }}/cloud-sql-proxy.linux.{{ cloud_sql_proxy_arch }}
     dest: "{{ cloud_sql_proxy_install_dir }}/cloud-sql-proxy"
     mode: '0755'
-    force: no
     checksum: >-
       {{ (cloud_sql_proxy_sha256 | length > 0)
          | ternary('sha256:' + cloud_sql_proxy_sha256, omit) }}
