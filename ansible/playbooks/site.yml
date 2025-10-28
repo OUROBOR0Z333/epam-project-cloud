@@ -13,6 +13,7 @@
     db_name: "{{ db_name | default('movie_db') }}"
     db_user: "{{ db_user | default('app_user') }}"
     db_password: "{{ db_password | default('your_secure_password_here') }}"
+    db_connection_name: "{{ db_connection_name | default('epamgcpdeployment2:us-central1:movie-db-qa') }}"
   tasks:
     - name: Ensure ACL support is present
       apt:
@@ -50,6 +51,12 @@
         global: yes
         state: present
 
+    - name: Install Cloud SQL Proxy
+      apt:
+        name: cloud-sql-proxy
+        state: present
+        update_cache: yes
+
     - name: Create application directory
       file:
         path: "{{ app_dir }}"
@@ -57,6 +64,28 @@
         owner: "{{ app_user }}"
         group: "{{ app_group }}"
         mode: '0755'
+
+    - name: Create Cloud SQL Proxy service file
+      copy:
+        content: |
+          [Unit]
+          Description=Cloud SQL Proxy
+          After=network.target
+
+          [Service]
+          Type=simple
+          User={{ app_user }}
+          ExecStart=/usr/bin/cloud-sql-proxy --unix-socket-path=/cloudsql {{ db_connection_name }}
+          Restart=always
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/cloud-sql-proxy.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart-cloud-sql-proxy
 
     - name: Clone backend application
       git:
@@ -84,10 +113,18 @@
       become_user: "{{ app_user }}"
       notify: restart-backend
 
+    - name: Start Cloud SQL Proxy as a background service
+      systemd:
+        name: cloud-sql-proxy
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      # Create and start the Cloud SQL Proxy service to allow DB connections
+
     - name: Wait briefly before attempting schema initialization
       pause:
         seconds: 30
-      # Wait for some time to ensure system is ready before attempting to run seeds.js
+      # Wait for Cloud SQL Proxy to establish connection
 
     - name: Run database schema initialization
       command: node seeds.js
@@ -127,6 +164,10 @@
     - name: restart-backend
       command: pm2 restart movie-analyst-backend
       become_user: "{{ app_user }}"
+    - name: restart-cloud-sql-proxy
+      systemd:
+        name: cloud-sql-proxy
+        state: restarted
 
 - name: Deploy Frontend Application
   hosts: frontend
