@@ -47,3 +47,26 @@
   • Migrate to proper migration tool (Flyway, Liquibase, Knex, etc.).
   • Terraform `null_resource` + `gcloud sql import`.
   • Dedicated "Init DB" job in GitHub Actions after Ansible.
+  
+- GCP Service Account Requirements (2025-10-28):
+  - For the database initialization workflow to work properly, the service account used by GitHub Actions
+    must have the following roles:
+    
+    1. `roles/cloudsql.client` - Required for connecting to Cloud SQL instances
+    2. `roles/iam.serviceAccountTokenCreator` - Required for generating access tokens during authentication
+    3. `roles/editor` - General project edit permissions
+    4. `roles/storage.admin` - For accessing Google Cloud Storage (for downloading Cloud SQL Proxy)
+    
+    To grant these permissions, use the following commands:
+    ```bash
+    gcloud projects add-iam-policy-binding PROJECT_ID \
+        --member="serviceAccount:SERVICE_ACCOUNT_EMAIL" \
+        --role="roles/cloudsql.client"
+    
+    gcloud projects add-iam-policy-binding PROJECT_ID \
+        --member="serviceAccount:SERVICE_ACCOUNT_EMAIL" \
+        --role="roles/iam.serviceAccountTokenCreator"
+    ```
+    
+    Without these roles, the GitHub Actions workflow will fail with:
+    "Permission 'iam.serviceAccounts.getAccessToken' denied on resource"
