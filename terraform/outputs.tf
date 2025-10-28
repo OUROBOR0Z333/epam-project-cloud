@@ -45,6 +45,7 @@ output "database_name" {
 output "database_user" {
   description = "User for the database"
   value       = module.database.database_user
+  sensitive   = true
 }
 
 output "database_password" {
