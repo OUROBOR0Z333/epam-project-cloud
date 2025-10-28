@@ -1,7 +1,7 @@
 ---
 # Ansible playbook for deploying the movie-analyst application
 
-- name: Deploy and Initialize Backend Application
+- name: Deploy Backend Application
   hosts: backend
   become: yes
   vars:
@@ -120,29 +120,6 @@
         enabled: yes
         daemon_reload: yes
       # Create and start the Cloud SQL Proxy service to allow DB connections
-
-    - name: Wait briefly before attempting schema initialization
-      pause:
-        seconds: 30
-      # Wait for Cloud SQL Proxy to establish connection
-
-    - name: Run database schema initialization
-      command: node seeds.js
-      args:
-        chdir: "{{ app_dir }}/movie-analyst-api/movie-analyst-api"
-      environment:
-        DB_HOST: "{{ db_host }}"
-        DB_USER: "{{ db_user }}"
-        DB_PASS: "{{ db_password }}"
-        DB_NAME: "{{ db_name }}"
-      become_user: "{{ app_user }}"
-      register: schema_result
-      # Only run if tables don't exist yet
-      # NOTE: In production, you might want a more sophisticated check
-
-    - name: Display schema initialization result
-      debug:
-        msg: "Schema initialization completed: {{ schema_result.stdout_lines | default('No output') }}"
 
     - name: Start backend service with PM2
       command: pm2 start server.js -n movie-analyst-backend --cwd {{ app_dir }}/movie-analyst-api/movie-analyst-api

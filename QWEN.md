@@ -22,7 +22,12 @@
      returns 500.
   
   Remediation (short-term)
-  • Added an Ansible task (in site.yml) that executes seeds.js after code deployment:
+  • Separated concerns by creating two distinct Ansible playbooks:
+    1. `site.yml` - Handles application deployment and Cloud SQL Proxy setup
+    2. `database_init.yml` - Dedicated playbook for database schema initialization
+    
+  The new approach:
+  • `database_init.yml` executes seeds.js in a separate step after application deployment:
   ```yaml
    - name: Run database schema initialization
      command: node seeds.js
@@ -36,7 +41,7 @@
      become_user: "{{ app_user }}"
      register: schema_result
   ```  
-  This ensures database schema is created before the backend service starts.
+  This provides better separation of concerns between application and database deployment.
   
   Long-term options
   • Migrate to proper migration tool (Flyway, Liquibase, Knex, etc.).

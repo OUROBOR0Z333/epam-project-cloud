@@ -1,6 +1,6 @@
 ---
 # Ansible playbook for database schema initialization
-# This would be run after application deployment but before starting the backend
+# This should be run after application deployment but before starting the backend service
 
 - name: Initialize Database Schema and Data
   hosts: backend
@@ -8,11 +8,16 @@
   vars:
     app_user: "app"
     app_dir: "/opt/movie-analyst"
-    db_host: "{{ db_host | default('localhost') }}"
+    db_host: "{{ db_host | default('127.0.0.1') }}"  # Using localhost for Cloud SQL Proxy
     db_name: "{{ db_name | default('movie_db') }}"
     db_user: "{{ db_user | default('app_user') }}"
     db_password: "{{ db_password | default('your_secure_password_here') }}"
   tasks:
+    - name: Wait briefly for Cloud SQL Proxy to be ready
+      pause:
+        seconds: 30
+      # Allow time for the Cloud SQL Proxy to establish connection
+
     - name: Run database schema initialization
       command: node seeds.js
       args:
@@ -28,3 +33,8 @@
     - name: Display schema initialization result
       debug:
         msg: "Schema initialization completed: {{ schema_result.stdout_lines | default('No output') }}"
+
+    - name: Check for errors in schema initialization
+      fail:
+        msg: "Database schema initialization failed"
+      when: schema_result.rc != 0
