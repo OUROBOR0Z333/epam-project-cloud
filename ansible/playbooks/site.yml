@@ -14,6 +14,12 @@
     db_user: "{{ db_user | default('app_user') }}"
     db_password: "{{ db_password | default('your_secure_password_here') }}"
   tasks:
+    - name: Ensure app group exists
+      group:
+        name: "{{ app_group }}"
+        system: yes
+        state: present
+
     - name: Ensure app user exists
       user:
         name: "{{ app_user }}"
@@ -101,6 +107,12 @@
     frontend_port: "{{ frontend_port | default(3030) }}"
     backend_url: "{{ backend_url | default('http://10.0.2.2:3000') }}"
   tasks:
+    - name: Ensure app group exists
+      group:
+        name: "{{ app_group }}"
+        system: yes
+        state: present
+
     - name: Ensure app user exists
       user:
         name: "{{ app_user }}"
