@@ -267,7 +267,8 @@ jobs:
             --format="value(instance.basename())" 2>/dev/null)
           
           # Define the ProxyCommand using the single, correct POSIX username
-          PROXY_COMMAND="'ssh -W %h:%p -q -o StrictHostKeyChecking=no ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}'"
+          # Include the private key for authentication in both hops
+          PROXY_COMMAND="'ssh -i ~/.ssh/gcp_oslogin_key -W %h:%p -q -o StrictHostKeyChecking=no ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}'"
           SSH_COMMON_ARGS="-o ProxyCommand=$PROXY_COMMAND"
           
           # Create the inventory file
