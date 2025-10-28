@@ -71,12 +71,48 @@ jobs:
         cd terraform
         # Refresh the state to ensure we have the latest outputs
         terraform refresh
-        echo "db_host=$(terraform output -raw database_connection_name)" >> $GITHUB_OUTPUT
-        echo "db_name=$(terraform output -raw database_name)" >> $GITHUB_OUTPUT
-        echo "db_user=$(terraform output -raw database_user)" >> $GITHUB_OUTPUT
-        echo "db_password=$(terraform output -raw database_password)" >> $GITHUB_OUTPUT
-        # Use the correct output variable name from the app-instances module
-        echo "backend_ip=$(terraform output -raw backend_internal_ip)" >> $GITHUB_OUTPUT
+        # Capture each output separately to handle potential errors
+        DB_HOST=$(terraform output -raw database_connection_name 2>/dev/null || echo "")
+        DB_NAME=$(terraform output -raw database_name 2>/dev/null || echo "")
+        DB_USER=$(terraform output -raw database_user 2>/dev/null || echo "")
+        DB_PASSWORD=$(terraform output -raw database_password 2>/dev/null || echo "")
+        BACKEND_IP=$(terraform output -raw backend_internal_ip 2>/dev/null || echo "")
+        
+        # Only write to GITHUB_OUTPUT if the values exist
+        if [ -n "$DB_HOST" ]; then
+          echo "db_host=$DB_HOST" >> $GITHUB_OUTPUT
+        else
+          echo "Error: database_connection_name not found in Terraform outputs"
+          exit 1
+        fi
+        
+        if [ -n "$DB_NAME" ]; then
+          echo "db_name=$DB_NAME" >> $GITHUB_OUTPUT
+        else
+          echo "Error: database_name not found in Terraform outputs"
+          exit 1
+        fi
+        
+        if [ -n "$DB_USER" ]; then
+          echo "db_user=$DB_USER" >> $GITHUB_OUTPUT
+        else
+          echo "Error: database_user not found in Terraform outputs"
+          exit 1
+        fi
+        
+        if [ -n "$DB_PASSWORD" ]; then
+          echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
+        else
+          echo "Error: database_password not found in Terraform outputs"
+          exit 1
+        fi
+        
+        if [ -n "$BACKEND_IP" ]; then
+          echo "backend_ip=$BACKEND_IP" >> $GITHUB_OUTPUT
+        else
+          echo "Error: backend_internal_ip not found in Terraform outputs"
+          exit 1
+        fi
 
     - name: Get OS Login SSH Username for Backend
       id: backend-user
