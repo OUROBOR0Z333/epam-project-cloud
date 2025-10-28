@@ -218,7 +218,8 @@ jobs:
           echo "Determining OS Login username for the workflow's SA..."
           WORKFLOW_SA_EMAIL=$(gcloud config get-value account)
           WORKFLOW_UNIQUE_ID=$(gcloud iam service-accounts describe "$WORKFLOW_SA_EMAIL" --format="value(uniqueId)")
-          OS_LOGIN_USER="sa_$(echo $WORKFLOW_UNIQUE_ID | cut -c 1-10)"
+          # For service accounts, OS Login uses the full uniqueId, not just first 10 digits
+          OS_LOGIN_USER="sa_$WORKFLOW_UNIQUE_ID"
           echo "OS_LOGIN_USER=$OS_LOGIN_USER" >> $GITHUB_OUTPUT
           
           # Set environment variable for use in later steps
