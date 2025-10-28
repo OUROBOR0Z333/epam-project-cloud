@@ -1,21 +1,6 @@
 ---
 # tasks/main.yml for backend role
 
-- name: Ensure app group exists
-  group:
-    name: "{{ app_group }}"
-    system: yes
-    state: present
-
-- name: Ensure app user exists
-  user:
-    name: "{{ app_user }}"
-    group: "{{ app_group }}"
-    shell: /bin/bash
-    home: "/home/{{ app_user }}"
-    create_home: yes
-    state: present
-
 - name: Install Node.js and npm
   apt:
     name: 
@@ -39,7 +24,7 @@
     group: "{{ app_group }}"
     mode: '0755'
 
-- name: Download Cloud SQL Proxy
+- name: Download Cloud SQL Proxy (without checksum verification)
   get_url:
     url: >-
       https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/
@@ -47,12 +32,18 @@
     dest: "{{ cloud_sql_proxy_install_dir }}/cloud-sql-proxy"
     mode: '0755'
     force: yes
-    # In a production setup, you should set the actual checksum
-    # checksum: "sha256:{{ cloud_sql_proxy_sha256 }}"
   when: cloud_sql_proxy_sha256 == ""
 
-  # For production, you would use the checksum like this:
-  # checksum: "sha256:{{ cloud_sql_proxy_sha256 }}"
+- name: Download Cloud SQL Proxy (with checksum verification)
+  get_url:
+    url: >-
+      https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/
+      v{{ cloud_sql_proxy_version }}/cloud-sql-proxy.linux.{{ cloud_sql_proxy_arch }}
+    dest: "{{ cloud_sql_proxy_install_dir }}/cloud-sql-proxy"
+    mode: '0755'
+    force: yes
+    checksum: "sha256:{{ cloud_sql_proxy_sha256 }}"
+  when: cloud_sql_proxy_sha256 != ""
 
 - name: Install Cloud SQL Proxy service file
   template:
@@ -70,14 +61,12 @@
     force: yes
     depth: 1
   become_user: "{{ app_user }}"
-  notify: restart-backend
 
 - name: Install backend dependencies
   npm:
     path: "{{ app_dir }}/movie-analyst-api/movie-analyst-api"
     state: present
   become_user: "{{ app_user }}"
-  notify: restart-backend
 
 - name: Create backend environment file
   template:
@@ -87,7 +76,6 @@
     group: "{{ app_group }}"
     mode: '0644'
   become_user: "{{ app_user }}"
-  notify: restart-backend
 
 - name: Start Cloud SQL Proxy as a background service
   systemd:

@@ -1,21 +1,6 @@
 ---
 # tasks/main.yml for frontend role
 
-- name: Ensure app group exists
-  group:
-    name: "{{ app_group }}"
-    system: yes
-    state: present
-
-- name: Ensure app user exists
-  user:
-    name: "{{ app_user }}"
-    group: "{{ app_group }}"
-    shell: /bin/bash
-    home: "/home/{{ app_user }}"
-    create_home: yes
-    state: present
-
 - name: Install Node.js and npm
   apt:
     name: 
