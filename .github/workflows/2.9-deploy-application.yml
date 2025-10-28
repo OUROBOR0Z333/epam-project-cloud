@@ -304,6 +304,44 @@ jobs:
           grep "ProxyCommand" ./ansible/inventory/${{ inputs.environment }}_temp.ini
         working-directory: .
 
+      - name: '[DEBUG] Manually Test SSH Connectivity'
+        run: |
+          echo "--- STARTING EXTENSIVE SSH DEBUG ---"
+          
+          # Use set +e to allow commands to fail without stopping the workflow
+          set +e
+
+          echo "
+          [Step 1: Verify Prerequisites]
+          "
+          echo "--> Checking for SSH key files..."
+          ls -la ~/.ssh
+
+          echo "--> Verifying the public key is associated with the WORKFLOW's Service Account in OS Login..."
+          # This command checks what GCP knows about the SA running this workflow
+          # We expect to see the public key from gcp_oslogin_key.pub in the output.
+          gcloud compute os-login describe-profile
+
+          echo "
+          [Step 2: Testing Hop 1 - Direct Connection to Bastion]
+          "
+          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.BASTION_OS_USER }}@${{ env.BASTION_IP }} 'echo \"SUCCESS: Connected to Bastion\"'"
+          ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.BASTION_OS_USER }}@${{ env.BASTION_IP }} 'echo "SUCCESS: Connected to Bastion"'
+          SSH_EXIT_CODE=$?
+          echo "--> Bastion SSH command exited with code: $SSH_EXIT_CODE"
+
+
+          echo "
+          [Step 3: Testing Hop 2 - Proxied Connection to Backend]
+          "
+          PROXY_COMMAND="ssh -vvv -i ~/.ssh/gcp_oslogin_key -W %h:%p ${{ env.BASTION_OS_USER }}@${{ env.BASTION_IP }}"
+          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key -o 'ProxyCommand=${PROXY_COMMAND}' ${{ env.APP_OS_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo \"SUCCESS: Connected to Backend\"'"
+          ssh -vvv -i ~/.ssh/gcp_oslogin_key -o "ProxyCommand=${PROXY_COMMAND}" ${{ env.APP_OS_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo "SUCCESS: Connected to Backend"'
+          SSH_EXIT_CODE=$?
+          echo "--> Backend SSH command exited with code: $SSH_EXIT_CODE"
+
+          echo "--- FINISHED EXTENSIVE SSH DEBUG ---"
+
       - name: Run Ansible Playbook for Application Deployment
         run: |
           echo "Running Ansible playbook to deploy the application..."
