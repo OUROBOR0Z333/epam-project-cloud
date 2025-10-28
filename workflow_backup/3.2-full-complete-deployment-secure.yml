@@ -1,0 +1,193 @@
+name: Complete Infrastructure Deployment with Secure Workspaces
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to (qa/prod)'
+        required: true
+        default: 'qa'
+        type: choice
+        options:
+          - qa
+          - prod
+      auto_approve:
+        description: 'Auto approve Terraform changes (use with caution)'
+        required: true
+        default: false
+        type: boolean
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  GCP_ZONE: ${{ secrets.GCP_ZONE }}
+
+jobs:
+  authenticate:
+    runs-on: ubuntu-latest
+    outputs:
+      authenticated: ${{ steps.auth-test.outputs.authenticated }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Test GCP Authentication
+        id: auth-test
+        run: |
+          gcloud auth list
+          if gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} > /dev/null 2>&1; then
+            echo "authenticated=true" >> $GITHUB_OUTPUT
+            echo "Authentication successful"
+          else
+            echo "Authentication failed"
+            exit 1
+          fi
+
+  deploy-infrastructure:
+    needs: authenticate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'qa' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+          terraform_wrapper: false
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Terraform Backend (Workspace Selection)
+        run: |
+          cd ./terraform
+          
+          # Initialize Terraform
+          terraform init -backend-config="prefix=${{ inputs.environment }}/terraform/state"
+          
+          # List existing workspaces
+          echo "Current workspaces:"
+          terraform workspace list
+          
+          # Check if the target workspace exists and switch to it, or create it if it doesn't exist
+          if terraform workspace list | grep -q "${{ inputs.environment }}"; then
+            echo "Switching to existing workspace: ${{ inputs.environment }}"
+            terraform workspace select ${{ inputs.environment }}
+          else
+            echo "Creating new workspace: ${{ inputs.environment }}"
+            terraform workspace new ${{ inputs.environment }}
+          fi
+          
+          # Verify we are on the correct workspace
+          echo "Current workspace:"
+          terraform workspace show
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+
+      - name: Import Existing Resources to State
+        run: |
+          cd ./terraform
+          
+          # Check if service accounts already exist in GCP but not in state, then import them
+          
+          # Check if app service account exists in GCP
+          if gcloud iam service-accounts describe app-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+            # Check if it already exists in state
+            if ! terraform state show module.app_instances.google_service_account.app_instances >/dev/null 2>&1; then
+              echo "Importing existing app service account to Terraform state..."
+              terraform import module.app_instances.google_service_account.app_instances projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/app-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+              echo "App service account imported successfully"
+            else
+              echo "App service account already exists in Terraform state"
+            fi
+          else
+            echo "App service account does not exist in GCP, will be created during deployment"
+          fi
+          
+          # Check if bastion service account exists in GCP
+          if gcloud iam service-accounts describe bastion-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+            # Check if it already exists in state
+            if ! terraform state show module.bastion.google_service_account.bastion >/dev/null 2>&1; then
+              echo "Importing existing bastion service account to Terraform state..."
+              terraform import module.bastion.google_service_account.bastion projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/bastion-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+              echo "Bastion service account imported successfully"
+            else
+              echo "Bastion service account already exists in Terraform state"
+            fi
+          else
+            echo "Bastion service account does not exist in GCP, will be created during deployment"
+          fi
+
+
+      - name: Terraform Validate
+        run: |
+          cd ./terraform
+          terraform validate
+          terraform fmt -check
+
+      - name: Terraform Plan
+        run: |
+          cd ./terraform
+          terraform plan \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="region=${{ secrets.GCP_REGION }}" \
+            -var="zone=${{ secrets.GCP_ZONE }}" \
+            -var="db_root_password=${{ secrets.DB_ROOT_PASSWORD }}" \
+            -out=tfplan.binary
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+
+      - name: Show Plan Summary
+        run: |
+          cd ./terraform
+          terraform show -no-color tfplan.binary
+
+      - name: Terraform Apply
+        if: ${{ inputs.auto_approve == true }}
+        run: |
+          cd ./terraform
+          terraform apply -auto-approve tfplan.binary || {
+            echo "Terraform apply failed - cleaning up lock file"
+            gsutil rm gs://epam-bucket-gcp2025/${{ inputs.environment }}/terraform/state/${{ inputs.environment }}.tflock || true
+            exit 1
+          }
+        env:
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+
+      - name: Warning for Manual Apply Required
+        if: ${{ inputs.auto_approve == false }}
+        run: |
+          echo "Manual approval required. Plan has been generated but not applied."
+          echo "To apply manually, run: terraform apply tfplan.binary in the terraform directory"
+          echo "This is the secure option to prevent unintended changes."

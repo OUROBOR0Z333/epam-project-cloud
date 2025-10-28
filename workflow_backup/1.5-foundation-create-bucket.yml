@@ -1,0 +1,109 @@
+name: 1.5 Foundation – Create GCS Bucket
+
+on:
+  workflow_dispatch:
+    inputs:
+      bucket_name:
+        description: "GCS Bucket Name (leave empty to use TERRAFORM_STATE_BUCKET secret)"
+        required: false
+      location:
+        description: "Bucket location (US, EU, asia-east1, …)"
+        required: false
+        default: "US"
+      environment:
+        description: "Environment (dev / staging / prod)"
+        required: false
+        default: "dev"
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  create-gcs-bucket:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+
+    steps:
+    # 0) Checkout (optional)
+    - uses: actions/checkout@v3
+
+    # 1) Authenticate
+    - uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    # 2) Install gcloud / gsutil
+    - uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ env.GCP_PROJECT_ID }}
+        install_components: "gsutil"
+
+    # 3) Quick auth sanity-check
+    - name: Verify authentication
+      run: |
+        gcloud auth list --filter=status:ACTIVE
+        gcloud projects describe "$GCP_PROJECT_ID" --format='get(projectId)'
+
+    # 4) Determine bucket name
+    - name: Determine bucket name
+      run: |
+        if [ -n "${{ inputs.bucket_name }}" ]; then
+          BN="${{ inputs.bucket_name }}"
+        elif [ -n "${{ secrets.TERRAFORM_STATE_BUCKET }}" ]; then
+          BN="${{ secrets.TERRAFORM_STATE_BUCKET }}"
+        else
+          echo "❌ No bucket name provided and TERRAFORM_STATE_BUCKET secret is empty"
+          exit 1
+        fi
+        BN="${BN#gs://}"
+        BN="${BN%/}"
+        echo "BUCKET_NAME=$BN" >> "$GITHUB_ENV"
+        echo "Bucket to use: $BN"
+
+    # 5) Does the bucket exist?  ---> sets a step OUTPUT
+    - id: check
+      name: Check if bucket exists
+      run: |
+        if gsutil ls "gs://${{ env.BUCKET_NAME }}" >/dev/null 2>&1; then
+          echo "Bucket already exists"
+          echo "::set-output name=exists::true"
+        else
+          echo "Bucket does not exist"
+          echo "::set-output name=exists::false"
+        fi
+
+    # 6) Create bucket (only when it doesn't exist)
+    - name: Create GCS bucket
+      if: steps.check.outputs.exists == 'false'
+      run: |
+        set -e
+        echo "Creating bucket gs://${{ env.BUCKET_NAME }} in ${{ inputs.location }} ..."
+        gsutil mb -p "$GCP_PROJECT_ID" -c STANDARD -l "${{ inputs.location }}" "gs://${{ env.BUCKET_NAME }}"
+        gsutil versioning set on "gs://${{ env.BUCKET_NAME }}"
+        echo "✓ Bucket created and versioning enabled"
+
+    # 7) Set IAM permissions (only when bucket is new)
+    - name: Set IAM permissions
+      if: steps.check.outputs.exists == 'false'
+      run: |
+        SA_EMAIL=$(gcloud auth list --filter=status:ACTIVE --format='value(account)')
+        echo "Granting objectAdmin + legacyBucketOwner on the bucket to $SA_EMAIL"
+        gsutil iam ch "serviceAccount:${SA_EMAIL}:objectAdmin"       "gs://${{ env.BUCKET_NAME }}"
+        gsutil iam ch "serviceAccount:${SA_EMAIL}:legacyBucketOwner" "gs://${{ env.BUCKET_NAME }}"
+
+    # 8) Verify bucket creation / metadata
+    - name: Verify bucket creation
+      run: |
+        echo "Verifying bucket gs://${{ env.BUCKET_NAME }} ..."
+        if gsutil ls -Lb "gs://${{ env.BUCKET_NAME }}" > /dev/null 2>&1; then
+          echo "✓ Bucket exists and is accessible"
+          echo ""
+          echo "Bucket metadata:"
+          gsutil ls -Lb "gs://${{ env.BUCKET_NAME }}"
+          echo ""
+          echo "Versioning status:"
+          gsutil versioning get "gs://${{ env.BUCKET_NAME }}"
+        else
+          echo "✗ Bucket verification failed: gs://${{ env.BUCKET_NAME }}"
+          exit 1
+        fi

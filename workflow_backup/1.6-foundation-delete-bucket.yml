@@ -1,0 +1,118 @@
+name: 1.6 Foundation – Delete GCS Bucket
+
+on:
+  workflow_dispatch:
+    inputs:
+      bucket_name:
+        description: "GCS Bucket Name to delete (without gs:// prefix)"
+        required: true
+      confirm_deletion:
+        description: "Type 'DELETE' to confirm bucket deletion"
+        required: true
+      environment:
+        description: "Environment (dev / staging / prod)"
+        required: false
+        default: "dev"
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  delete-gcs-bucket:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+
+    steps:
+    # 0) Checkout (optional)
+    - uses: actions/checkout@v3
+
+    # 1) Authenticate
+    - uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    # 2) Install gcloud / gsutil
+    - uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ env.GCP_PROJECT_ID }}
+        install_components: "gsutil"
+
+    # 3) Quick auth sanity-check
+    - name: Verify authentication
+      run: |
+        gcloud auth list --filter=status:ACTIVE
+        gcloud projects describe "$GCP_PROJECT_ID" --format='get(projectId)'
+
+    # 4) Confirm deletion
+    - name: Confirm deletion
+      run: |
+        if [ "${{ inputs.confirm_deletion }}" != "DELETE" ]; then
+          echo "❌ Deletion not confirmed. Please type 'DELETE' to confirm."
+          exit 1
+        fi
+        echo "✓ Deletion confirmed"
+
+    # 5) Validate and normalize bucket name
+    - name: Validate bucket name
+      run: |
+        BUCKET_NAME="${{ inputs.bucket_name }}"
+        BUCKET_NAME="${BUCKET_NAME#gs://}"
+        BUCKET_NAME="${BUCKET_NAME%/}"
+        if [ -z "$BUCKET_NAME" ]; then
+          echo "❌ Invalid bucket name"
+          exit 1
+        fi
+        echo "BUCKET_NAME=$BUCKET_NAME" >> "$GITHUB_ENV"
+        echo "Target bucket: gs://$BUCKET_NAME"
+
+    # 6) Does the bucket exist?  ---> sets a step OUTPUT
+    - id: check
+      name: Check if bucket exists
+      run: |
+        if gsutil ls "gs://${{ env.BUCKET_NAME }}" >/dev/null 2>&1; then
+          echo "Bucket exists"
+          echo "::set-output name=exists::true"
+        else
+          echo "Bucket does not exist"
+          echo "::set-output name=exists::false"
+        fi
+
+    # 7) List bucket contents (only if it exists)
+    - name: List bucket contents
+      if: steps.check.outputs.exists == 'true'
+      run: |
+        echo "Contents of gs://${{ env.BUCKET_NAME }}:"
+        gsutil ls -r "gs://${{ env.BUCKET_NAME }}"
+
+    # 8) Remove all objects from bucket (only if it exists)
+    - name: Remove all objects
+      if: steps.check.outputs.exists == 'true'
+      run: |
+        echo "Removing all objects from gs://${{ env.BUCKET_NAME }} ..."
+        gsutil -m rm -r "gs://${{ env.BUCKET_NAME }}/**"
+        echo "✓ Objects removed"
+
+    # 9) Delete the bucket (only if it exists)
+    - name: Delete bucket
+      if: steps.check.outputs.exists == 'true'
+      run: |
+        echo "Deleting bucket gs://${{ env.BUCKET_NAME }} ..."
+        gsutil rb "gs://${{ env.BUCKET_NAME }}"
+        echo "✓ Bucket deleted"
+
+    # 10) Report if already deleted
+    - name: Report already deleted
+      if: steps.check.outputs.exists == 'false'
+      run: |
+        echo "Bucket gs://${{ env.BUCKET_NAME }} was already deleted or never existed"
+        echo "✓ Operation completed successfully"
+
+    # 11) Final verification
+    - name: Verify deletion
+      run: |
+        if ! gsutil ls "gs://${{ env.BUCKET_NAME }}" >/dev/null 2>&1; then
+          echo "✓ Final verification: bucket gs://${{ env.BUCKET_NAME }} does not exist"
+        else
+          echo "⚠ Warning: bucket gs://${{ env.BUCKET_NAME }} still appears to exist"
+          exit 1
+        fi

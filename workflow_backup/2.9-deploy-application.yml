@@ -1,0 +1,449 @@
+name: Deploy Application
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment (qa/prod)'
+        required: true
+        default: 'qa'
+        type: choice
+        options:
+          - qa
+          - prod
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  GCP_ZONE: ${{ secrets.GCP_ZONE }}
+
+jobs:
+  application-deployment:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: '[DEBUG] Verify IAM Roles for Workflow SA'
+        run: |
+          echo "--- Verifying IAM roles for the workflow service account ---"
+          WORKFLOW_SA_EMAIL=$(gcloud config get-value account)
+          echo "Checking roles for: $WORKFLOW_SA_EMAIL"
+          
+          if [ -n "$WORKFLOW_SA_EMAIL" ]; then
+            gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
+              --flatten="bindings[].members" \
+              --format='table(bindings.role)' \
+              --filter="bindings.members:$WORKFLOW_SA_EMAIL"
+          else
+            echo "WARNING: Could not determine authenticated service account"
+            echo "Listing all roles for reference:"
+            gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
+              --flatten="bindings[].members" \
+              --format='table(bindings.role,bindings.members)' \
+              --filter="bindings.members:*github-actions-test*"
+          fi
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform
+
+      - name: Configure Terraform Workspace
+        working-directory: ./terraform
+        run: |
+          # List existing workspaces
+          echo "Current workspaces:"
+          terraform workspace list
+          
+          # Check if workspace exists and switch to it, or create it if it doesn't exist
+          # Look for the environment name in the workspace list (handling * for current workspace)
+          if terraform workspace list | grep -E "(^|\*)\s*${{ inputs.environment }}$" > /dev/null; then
+            echo "Switching to existing ${{ inputs.environment }} workspace..."
+            terraform workspace select ${{ inputs.environment }}
+          else
+            echo "Creating new ${{ inputs.environment }} workspace..."
+            terraform workspace new ${{ inputs.environment }}
+          fi
+
+      - name: Get Infrastructure Information
+        run: |
+          # Select appropriate workspace
+          terraform workspace select ${{ inputs.environment }}
+          
+          echo "Getting infrastructure information..."
+          
+          # Get database information
+          DB_HOST=$(terraform output -raw database_connection_name 2>/dev/null)
+          if [ -z "$DB_HOST" ]; then
+            # If terraform output fails, use a default value
+            DB_HOST="${{ secrets.GCP_PROJECT_ID }}:us-central1:movie-db-${{ inputs.environment }}"
+          fi
+          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+          
+          DB_NAME=$(terraform output -raw database_name 2>/dev/null || echo "movie_db")
+          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
+          
+          DB_USER=$(terraform output -raw database_user 2>/dev/null || echo "app_user")
+          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+          
+          # For password, we need to get it from a more reliable source
+          DB_PASSWORD=$(terraform output -raw database_password 2>/dev/null || echo "${{ secrets.DB_ROOT_PASSWORD }}")
+          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+          
+          # Get backend instance name and internal IP
+          BACKEND_NAME=$(terraform output -raw backend_instance_name 2>/dev/null || echo "backend-${{ inputs.environment }}")
+          echo "BACKEND_NAME=$BACKEND_NAME" >> $GITHUB_ENV
+          
+          # Get bastion external IP
+          set +e  # Temporarily disable exit-on-error
+          BASTION_IP=$(gcloud compute instances describe "bastion-${{ inputs.environment }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --zone="${{ secrets.GCP_ZONE }}" \
+            --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null)
+          gcloud_exit_code=$?
+          set -e  # Re-enable exit-on-error
+          
+          if [ $gcloud_exit_code -ne 0 ] || [ -z "$BASTION_IP" ]; then
+            # Try to get from terraform state as fallback
+            BASTION_IP=$(terraform output -raw bastion_external_ip 2>/dev/null || echo "")
+          fi
+          if [ -n "$BASTION_IP" ]; then
+            echo "BASTION_IP=$BASTION_IP" >> $GITHUB_ENV
+          else
+            echo "Could not determine bastion IP"
+            exit 1
+          fi
+          
+          # Get bastion service account email to use as SSH user
+          BASTION_SA=$(terraform output -raw bastion_service_account 2>/dev/null || echo "")
+          if [ -n "$BASTION_SA" ]; then
+            # Store the full email address for use in OS Login key lookup
+            echo "BASTION_SA=$BASTION_SA" >> $GITHUB_ENV
+            # Extract user part from service account email (before the @) for legacy uses
+            BASTION_USER=$(echo "$BASTION_SA" | cut -d@ -f1)
+            echo "BASTION_USER=$BASTION_USER" >> $GITHUB_ENV
+          else
+            echo "Could not determine bastion service account, trying gcloud command..."
+            # Try to get the service account from instance metadata
+            set +e  # Temporarily disable exit-on-error
+            BASTION_SA=$(gcloud compute instances describe "bastion-${{ inputs.environment }}" \
+              --project="${{ secrets.GCP_PROJECT_ID }}" \
+              --zone="${{ secrets.GCP_ZONE }}" \
+              --format="value(serviceAccounts[0].email)" 2>/dev/null)
+            gcloud_exit_code=$?
+            set -e  # Re-enable exit-on-error
+            
+            if [ $gcloud_exit_code -ne 0 ] || [ -z "$BASTION_SA" ]; then
+              BASTION_SA=""
+            fi
+            
+            if [ -n "$BASTION_SA" ]; then
+              # Store the full email address for use in OS Login key lookup
+              echo "BASTION_SA=$BASTION_SA" >> $GITHUB_ENV
+              # Extract user part for other uses
+              BASTION_USER=$(echo "$BASTION_SA" | cut -d@ -f1)
+              echo "BASTION_USER=$BASTION_USER" >> $GITHUB_ENV
+            else
+              echo "BASTION_USER=ubuntu" >> $GITHUB_ENV
+            fi
+          fi
+          
+          # Get backend internal IP
+          set +e  # Temporarily disable exit-on-error
+          BACKEND_INTERNAL_IP=$(gcloud compute instances describe "$BACKEND_NAME" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --zone="${{ secrets.GCP_ZONE }}" \
+            --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
+          gcloud_exit_code=$?
+          set -e  # Re-enable exit-on-error
+          
+          if [ $gcloud_exit_code -ne 0 ] || [ -z "$BACKEND_INTERNAL_IP" ]; then
+            BACKEND_INTERNAL_IP="10.0.2.2"  # Default fallback
+          fi
+          echo "BACKEND_INTERNAL_IP=$BACKEND_INTERNAL_IP" >> $GITHUB_ENV
+          
+          # Get app service account for backend/frontend use
+          APP_SA=$(terraform output -raw app_service_account 2>/dev/null || echo "")
+          if [ -n "$APP_SA" ]; then
+            echo "APP_SA=$APP_SA" >> $GITHUB_ENV
+            # Extract user part from service account email (before the @) for legacy uses
+            APP_USER=$(echo "$APP_SA" | cut -d@ -f1)
+            echo "APP_USER=$APP_USER" >> $GITHUB_ENV
+          else
+            echo "Could not determine app service account"
+            exit 1
+          fi
+          
+          echo "Infrastructure details retrieved successfully"
+        working-directory: ./terraform
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ secrets.GCP_REGION }}
+          TF_VAR_zone: ${{ secrets.GCP_ZONE }}
+          TF_VAR_db_root_password: ${{ secrets.DB_ROOT_PASSWORD }}
+
+      - name: Configure SSH for GCP OS Login
+        id: os-login-key
+        run: |
+          # Step 1: Generate a temporary SSH key for this workflow run only
+          echo "Generating ephemeral SSH key..."
+          ssh-keygen -t ed25519 -f ~/.ssh/gcp_oslogin_key -N ""
+
+          # Step 2: Add the public key to the OS Login profile of the service account RUNNING this workflow.
+          # We remove the --account flag. This associates the key with the current authenticated user (the workflow SA).
+          echo "Uploading ephemeral public key to this workflow's SA profile..."
+          gcloud compute os-login ssh-keys add \
+            --key-file ~/.ssh/gcp_oslogin_key.pub \
+            --ttl 30m
+
+          # Step 3: Get the correct OS Login POSIX username for the WORKFLOW service account.
+          # This is the only user we need to connect as.
+          echo "Determining OS Login username for the workflow's SA..."
+          WORKFLOW_SA_EMAIL=$(gcloud config get-value account)
+          WORKFLOW_UNIQUE_ID=$(gcloud iam service-accounts describe "$WORKFLOW_SA_EMAIL" --format="value(uniqueId)")
+          # For service accounts, OS Login uses the full uniqueId, not just first 10 digits
+          OS_LOGIN_USER="sa_$WORKFLOW_UNIQUE_ID"
+          echo "OS_LOGIN_USER=$OS_LOGIN_USER" >> $GITHUB_OUTPUT
+          
+          # Set environment variable for use in later steps
+          echo "OS_LOGIN_USER=$OS_LOGIN_USER" >> $GITHUB_ENV
+          
+          echo "SSH key generation and OS Login registration completed for user: $OS_LOGIN_USER"
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Configure SSH for Ansible
+        run: |
+          mkdir -p ~/.ssh
+          # Configure SSH to work with our target hosts
+          echo "Host *" > ~/.ssh/config
+          echo "    StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "    UserKnownHostsFile /dev/null" >> ~/.ssh/config
+          echo "    ConnectTimeout 10" >> ~/.ssh/config
+
+      - name: Create dynamic inventory for application deployment
+        run: |
+          # Create temporary inventory file for this deployment
+          # First, get the frontend instance from the managed instance group
+          echo "Creating inventory file for ${{ inputs.environment }} environment..."
+          
+          # Ensure the ansible and inventory directories exist with more explicit approach
+          pwd  # Print current directory for debugging
+          ls -la  # List directory contents for debugging
+          mkdir -p ./ansible
+          mkdir -p ./ansible/inventory
+          ls -la ./ansible/  # List ansible directory contents for debugging
+          
+          # Get the instance group information
+          FRONTEND_IG="frontend-group-${{ inputs.environment }}"
+          
+          # List instances in the managed instance group
+          INSTANCES=$(gcloud compute instance-groups list-instances "$FRONTEND_IG" \
+            --zone="${{ secrets.GCP_ZONE }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --format="value(instance.basename())" 2>/dev/null)
+          
+          # Create the inventory file
+          echo "# ${{ inputs.environment }} environment inventory file - Auto-generated for deployment" > ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[bastion]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BASTION_IP }} ansible_host=${{ env.BASTION_IP }} ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[backend_servers]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          
+          # Define the ProxyCommand for connecting through the bastion (with single % signs, protected by single quotes)
+          PROXY_COMMAND="ssh -i ~/.ssh/gcp_oslogin_key -W %h:%p -q -o StrictHostKeyChecking=no ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}"
+          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"-o ProxyCommand='$PROXY_COMMAND'\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[frontend_servers]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          
+          # Add all frontend instances to the inventory
+          if [ -n "$INSTANCES" ]; then
+            # Use while loop with here-string to safely handle gcloud output
+            while IFS= read -r instance; do
+              # Skip empty lines
+              if [ -n "$instance" ]; then
+                # Get the internal IP for each instance
+                INSTANCE_INTERNAL_IP=$(gcloud compute instances describe "$instance" \
+                  --zone="${{ secrets.GCP_ZONE }}" \
+                  --project="${{ secrets.GCP_PROJECT_ID }}" \
+                  --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
+                
+                if [ -n "$INSTANCE_INTERNAL_IP" ]; then
+                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"-o ProxyCommand='$PROXY_COMMAND'\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                else
+                  echo "# Could not resolve internal IP for $instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                fi
+              fi
+            done <<< "$INSTANCES"
+          else
+            # If no instances found in the group, default to a standard IP
+            echo "# No running instances found in $FRONTEND_IG, using standard IP convention" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+            echo "10.0.2.3 ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"-o ProxyCommand='$PROXY_COMMAND'\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          fi
+          
+          # Create aliases for the special groups [backend] and [frontend] to avoid name conflicts
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[backend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BACKEND_INTERNAL_IP }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[frontend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          if [ -n "$INSTANCES" ]; then
+            # Use while loop with here-string to safely handle gcloud output
+            while IFS= read -r instance; do
+              # Skip empty lines
+              if [ -n "$instance" ]; then
+                # Get the internal IP for each instance
+                INSTANCE_INTERNAL_IP=$(gcloud compute instances describe "$instance" \
+                  --zone="${{ secrets.GCP_ZONE }}" \
+                  --project="${{ secrets.GCP_PROJECT_ID }}" \
+                  --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
+                
+                if [ -n "$INSTANCE_INTERNAL_IP" ]; then
+                  echo "$INSTANCE_INTERNAL_IP" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                fi
+              fi
+            done <<< "$INSTANCES"
+          else
+            echo "10.0.2.3" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          fi
+          
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[database]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "# Database is a Cloud SQL instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "# Connection name: ${{ env.DB_HOST }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          
+          echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "[all:vars]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "ansible_python_interpreter=/usr/bin/python3" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          
+          echo "Generated inventory file:"
+          cat ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          
+          echo "SSH config file contents:"
+          cat ~/.ssh/config
+        working-directory: .
+
+      - name: '[DEBUG] Definitive IAM Permissions Test'
+        run: |
+          echo "--- Running Definitive IAM & OS Login Test ---"
+          
+          # Check if the workflow SA can access the bastion instance
+          # This command checks if the service account has the right OS Login permissions
+          echo "Testing if workflow SA can access the bastion instance..."
+          gcloud compute instances describe "bastion-${{ inputs.environment }}" \
+            --zone="${{ env.GCP_ZONE }}" \
+            --project="${{ env.GCP_PROJECT_ID }}" \
+            --format="value(name,serviceAccounts.email)"
+          
+          # Check OS Login profile to verify the SSH key was properly added
+          echo "Checking OS Login profile for the workflow service account..."
+          gcloud compute os-login describe-profile
+          
+        working-directory: .
+
+      - name: '[DEBUG] Manually Test SSH Connectivity'
+        run: |
+          echo "--- STARTING EXTENSIVE SSH DEBUG ---"
+          
+          # Use set +e to allow commands to fail without stopping the workflow
+          set +e
+
+          echo "
+          [Step 1: Verify Prerequisites]
+          "
+          echo "--> Checking for SSH key files..."
+          ls -la ~/.ssh
+
+          echo "--> SSH config file contents:"
+          cat ~/.ssh/config
+
+          echo "--> Verifying the public key is associated with the WORKFLOW's Service Account in OS Login..."
+          # This command checks what GCP knows about the SA running this workflow
+          # We expect to see the public key from gcp_oslogin_key.pub in the output.
+          gcloud compute os-login describe-profile
+
+          echo "
+          [Step 2: Testing Hop 1 - Direct Connection to Bastion]
+          "
+          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }} 'echo \"SUCCESS: Connected to Bastion\"'"
+          ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }} 'echo "SUCCESS: Connected to Bastion"'
+          SSH_EXIT_CODE=$?
+          echo "--> Bastion SSH command exited with code: $SSH_EXIT_CODE"
+
+          echo "
+          [Step 3: Testing Hop 2 - Proxied Connection to Backend]
+          "
+          PROXY_COMMAND="ssh -vvv -i ~/.ssh/gcp_oslogin_key -W %h:%p ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}"
+          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key -o 'ProxyCommand=${PROXY_COMMAND}' ${{ env.OS_LOGIN_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo \"SUCCESS: Connected to Backend\"'"
+          ssh -vvv -i ~/.ssh/gcp_oslogin_key -o "ProxyCommand=${PROXY_COMMAND}" ${{ env.OS_LOGIN_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo "SUCCESS: Connected to Backend"'
+          SSH_EXIT_CODE=$?
+          echo "--> Backend SSH command exited with code: $SSH_EXIT_CODE"
+
+          echo "--- FINISHED EXTENSIVE SSH DEBUG ---"
+
+      - name: Clean up any existing SSH control sockets
+        run: |
+          # Remove any existing control sockets to prevent reuse of old connections
+          rm -rf ~/.ansible/cp/
+          mkdir -p ~/.ansible/cp/
+          
+      - name: Run Ansible Playbook for Application Deployment
+        run: |
+          echo "Running Ansible playbook to deploy the application..."
+          echo "Backend URL: http://${{ env.BACKEND_INTERNAL_IP }}:3000"
+          echo "Database: ${{ env.DB_HOST }} - ${{ env.DB_NAME }}"
+          echo "Workflow OS Login User: ${{ env.OS_LOGIN_USER }}"
+          
+          pwd  # Debug: Check current directory
+          ls -la  # Debug: List files in current directory
+          ls -la inventory/  # Debug: List files in inventory directory
+          
+          # Additional debug for SSH connection
+          echo "Checking SSH config..."
+          cat ~/.ssh/config
+          
+          echo "Attempting to ping backend host first..."
+          ansible -i inventory/${{ inputs.environment }}_temp.ini backend -m ping -vvv
+          
+          echo "Running Ansible playbook for application deployment..."
+          ansible-playbook \
+            -i inventory/${{ inputs.environment }}_temp.ini \
+            --extra-vars "db_host=${{ env.DB_HOST }} db_name=${{ env.DB_NAME }} db_user=${{ env.DB_USER }} db_password='${{ env.DB_PASSWORD }}' backend_url=http://${{ env.BACKEND_INTERNAL_IP }}:3000" \
+            playbooks/site.yml
+        working-directory: ./ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+          ANSIBLE_CONFIG: "ansible.cfg"
+
+      - name: '[INFO] Database Initialization Required'
+        run: |
+          echo "================================================="
+          echo "IMPORTANT: Database initialization is now required!"
+          echo "Run the database initialization workflow after this deployment:"
+          echo "  Workflow: 2.8.5 - Database Initialization"
+          echo "  Input: environment = ${{ inputs.environment }}"
+          echo "================================================="
