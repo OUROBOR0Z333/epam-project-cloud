@@ -65,7 +65,7 @@ jobs:
         terraform workspace list
         # No need to manually select since TF_WORKSPACE is already set
 
-    - name: Get Terraform Outputs
+    - name: Get Terraform and GCP Outputs
       id: tf-outputs
       run: |
         cd terraform
@@ -76,7 +76,13 @@ jobs:
         DB_NAME=$(terraform output -raw database_name 2>/dev/null || echo "")
         DB_USER=$(terraform output -raw database_user 2>/dev/null || echo "")
         DB_PASSWORD=$(terraform output -raw database_password 2>/dev/null || echo "")
+        
+        # If Terraform output for backend IP fails, get it from gcloud directly
         BACKEND_IP=$(terraform output -raw backend_internal_ip 2>/dev/null || echo "")
+        if [ -z "$BACKEND_IP" ]; then
+          echo "Warning: backend_internal_ip not found in Terraform outputs, getting from gcloud"
+          BACKEND_IP=$(gcloud compute instances describe backend-${{ env.TF_WORKSPACE }} --zone=us-central1-a --project=${{ secrets.GCP_PROJECT_ID }} --format="value(networkInterfaces[0].networkIP)" 2>/dev/null || echo "")
+        fi
         
         # Only write to GITHUB_OUTPUT if the values exist
         if [ -n "$DB_HOST" ]; then
@@ -110,7 +116,7 @@ jobs:
         if [ -n "$BACKEND_IP" ]; then
           echo "backend_ip=$BACKEND_IP" >> $GITHUB_OUTPUT
         else
-          echo "Error: backend_internal_ip not found in Terraform outputs"
+          echo "Error: backend_internal_ip not found in Terraform outputs or via gcloud"
           exit 1
         fi
 
