@@ -53,14 +53,13 @@ jobs:
     - name: Configure Terraform workspace
       run: |
         cd terraform
-        export TF_WORKSPACE=${{ env.TF_WORKSPACE }}
+        unset TF_WORKSPACE
         terraform workspace select -or-create=true ${{ env.TF_WORKSPACE }}
 
     - name: Get Terraform Outputs
       id: tf-outputs
       run: |
         cd terraform
-        export TF_WORKSPACE=${{ env.TF_WORKSPACE }}
         # Refresh the state to ensure we have the latest outputs
         terraform refresh
         # Now that workspace is properly set, try to get the outputs
