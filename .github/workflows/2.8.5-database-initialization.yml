@@ -123,17 +123,25 @@ jobs:
     - name: Create Ansible Inventory
       run: |
         mkdir -p ansible/inventory
+        # Create the inventory file with proper variable substitution
+        BACKEND_IP="${{ steps.tf-outputs.outputs.backend_ip }}"
+        BACKEND_USER="${{ steps.backend-user.outputs.BACKEND_USER }}"
+        DB_HOST="${{ steps.tf-outputs.outputs.db_host }}"
+        DB_NAME="${{ steps.tf-outputs.outputs.db_name }}"
+        DB_USER="${{ steps.tf-outputs.outputs.db_user }}"
+        DB_PASSWORD="${{ steps.tf-outputs.outputs.db_password }}"
+        
         cat > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini << EOF
         [backend]
-        ${{ steps.tf-outputs.outputs.backend_ip }} ansible_user=${{ steps.backend-user.outputs.BACKEND_USER }} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+        ${BACKEND_IP} ansible_user=${BACKEND_USER} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
         [backend:vars]
         ansible_python_interpreter=/usr/bin/python3
-        db_connection_name=${{ steps.tf-outputs.outputs.db_host }}
+        db_connection_name=${DB_HOST}
         db_host=127.0.0.1
-        db_name=${{ steps.tf-outputs.outputs.db_name }}
-        db_user=${{ steps.tf-outputs.outputs.db_user }}
-        db_password=${{ steps.tf-outputs.outputs.db_password }}
+        db_name=${DB_NAME}
+        db_user=${DB_USER}
+        db_password=${DB_PASSWORD}
         EOF
 
     - name: Run Database Schema Initialization with Ansible
