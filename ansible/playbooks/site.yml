@@ -75,7 +75,7 @@
           [Service]
           Type=simple
           User={{ app_user }}
-          ExecStart=/usr/bin/cloud-sql-proxy --unix-socket-path=/cloudsql {{ db_connection_name }}
+          ExecStart=/usr/bin/cloud-sql-proxy {{ db_connection_name }}
           Restart=always
           RestartSec=10
 
