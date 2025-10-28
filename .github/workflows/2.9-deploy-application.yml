@@ -304,6 +304,24 @@ jobs:
           grep "ProxyCommand" ./ansible/inventory/${{ inputs.environment }}_temp.ini
         working-directory: .
 
+      - name: '[DEBUG] Definitive IAM Permissions Test'
+        run: |
+          echo "--- Running Definitive IAM & OS Login Test ---"
+          
+          # Check if the workflow SA can access the bastion instance
+          # This command checks if the service account has the right OS Login permissions
+          echo "Testing if workflow SA can access the bastion instance..."
+          gcloud compute instances describe "bastion-${{ inputs.environment }}" \
+            --zone="${{ env.GCP_ZONE }}" \
+            --project="${{ env.GCP_PROJECT_ID }}" \
+            --format="value(name,serviceAccounts.email)"
+          
+          # Check OS Login profile to verify the SSH key was properly added
+          echo "Checking OS Login profile for the workflow service account..."
+          gcloud compute os-login describe-profile
+          
+        working-directory: .
+
       - name: '[DEBUG] Manually Test SSH Connectivity'
         run: |
           echo "--- STARTING EXTENSIVE SSH DEBUG ---"
