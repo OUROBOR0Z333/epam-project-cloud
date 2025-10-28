@@ -69,11 +69,14 @@ jobs:
       id: tf-outputs
       run: |
         cd terraform
+        # Refresh the state to ensure we have the latest outputs
+        terraform refresh
         echo "db_host=$(terraform output -raw database_connection_name)" >> $GITHUB_OUTPUT
         echo "db_name=$(terraform output -raw database_name)" >> $GITHUB_OUTPUT
         echo "db_user=$(terraform output -raw database_user)" >> $GITHUB_OUTPUT
         echo "db_password=$(terraform output -raw database_password)" >> $GITHUB_OUTPUT
-        echo "backend_ip=$(terraform output -raw backend_instance_private_ip)" >> $GITHUB_OUTPUT
+        # Use the correct output variable name from the app-instances module
+        echo "backend_ip=$(terraform output -raw backend_internal_ip)" >> $GITHUB_OUTPUT
 
     - name: Get OS Login SSH Username for Backend
       id: backend-user
