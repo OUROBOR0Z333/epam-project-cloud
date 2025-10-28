@@ -50,7 +50,8 @@ If you encounter authentication errors like "google-github-actions/auth failed w
 6. **`2.6-infrastructure-database-creation.yml`** - Sets up Cloud SQL database
 7. **`2.7-infrastructure-load-balancer-creation.yml`** - Creates HTTP load balancer
 8. **`2.8-infrastructure-application-deployment.yml`** - Deploys application via Ansible
-9. **`2.9-infrastructure-test-configuration.yml`** - Validates configuration without making changes
+9. **`2.8.5-database-initialization.yml`** - Initializes database schema and sample data
+10. **`2.9-infrastructure-test-configuration.yml`** - Validates configuration without making changes
 
 ## Full Deployment Workflows (3.n-full-*)
 

@@ -22,12 +22,12 @@
      returns 500.
   
   Remediation (short-term)
-  • Separated concerns by creating two distinct Ansible playbooks:
-    1. `site.yml` - Handles application deployment and Cloud SQL Proxy setup
-    2. `database_init.yml` - Dedicated playbook for database schema initialization
+  • Separated concerns by creating two distinct Ansible playbooks and GitHub Actions workflows:
+    1. `site.yml` + `2.9-deploy-application.yml` - Handles application deployment and Cloud SQL Proxy setup
+    2. `database_init.yml` + `2.8.5-database-initialization.yml` - Dedicated workflow for database schema initialization
     
   The new approach:
-  • `database_init.yml` executes seeds.js in a separate step after application deployment:
+  • `2.8.5-database-initialization.yml` executes seeds.js in a separate workflow after application deployment:
   ```yaml
    - name: Run database schema initialization
      command: node seeds.js
@@ -41,7 +41,7 @@
      become_user: "{{ app_user }}"
      register: schema_result
   ```  
-  This provides better separation of concerns between application and database deployment.
+  This provides better separation of concerns between application and database deployment, and allows for independent execution of each deployment step.
   
   Long-term options
   • Migrate to proper migration tool (Flyway, Liquibase, Knex, etc.).

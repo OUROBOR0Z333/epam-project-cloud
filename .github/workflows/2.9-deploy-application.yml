@@ -429,7 +429,7 @@ jobs:
           echo "Attempting to ping backend host first..."
           ansible -i inventory/${{ inputs.environment }}_temp.ini backend -m ping -vvv
           
-          echo "Running Ansible playbook..."
+          echo "Running Ansible playbook for application deployment..."
           ansible-playbook \
             -i inventory/${{ inputs.environment }}_temp.ini \
             --extra-vars "db_host=${{ env.DB_HOST }} db_name=${{ env.DB_NAME }} db_user=${{ env.DB_USER }} db_password='${{ env.DB_PASSWORD }}' backend_url=http://${{ env.BACKEND_INTERNAL_IP }}:3000" \
@@ -438,3 +438,12 @@ jobs:
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
           ANSIBLE_CONFIG: "ansible.cfg"
+
+      - name: '[INFO] Database Initialization Required'
+        run: |
+          echo "================================================="
+          echo "IMPORTANT: Database initialization is now required!"
+          echo "Run the database initialization workflow after this deployment:"
+          echo "  Workflow: 2.8.5 - Database Initialization"
+          echo "  Input: environment = ${{ inputs.environment }}"
+          echo "================================================="

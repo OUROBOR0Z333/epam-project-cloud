@@ -405,7 +405,95 @@ jobs:
           echo "    StrictHostKeyChecking no" >> ~/.ssh/config
           echo "    UserKnownHostsFile /dev/null" >> ~/.ssh/config
 
-      - name: Run Ansible Playbook
+      - name: Run Ansible Playbook for Application Deployment
         run: |
           ansible-playbook -i localhost, -c local -e "backend_url_var=http://localhost:3000" -e "db_host_var=$DB_HOST" -e "db_name_var=$DB_NAME" -e "db_user_var=$DB_USER" -e "db_password_var=$DB_PASSWORD" playbooks/site.yml
         working-directory: ./ansible
+
+  database-initialization:
+    runs-on: ubuntu-latest
+    needs: [application-deployment]
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Setup Ansible
+        run: |
+          pip install ansible
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          token_format: access_token
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init \
+            -backend-config="bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state/${{ inputs.environment }}/terraform"
+
+      - name: Terraform Select/Create Workspace
+        run: |
+          cd terraform
+          terraform workspace select ${{ inputs.environment }} || terraform workspace new ${{ inputs.environment }}
+
+      - name: Get Terraform Outputs
+        id: tf-outputs
+        run: |
+          cd terraform
+          echo "db_host=$(terraform output -raw database_connection_name)" >> $GITHUB_OUTPUT
+          echo "db_name=$(terraform output -raw database_name)" >> $GITHUB_OUTPUT
+          echo "db_user=$(terraform output -raw database_user)" >> $GITHUB_OUTPUT
+          echo "db_password=$(terraform output -raw database_password)" >> $GITHUB_OUTPUT
+          echo "backend_ip=$(terraform output -raw backend_instance_private_ip)" >> $GITHUB_OUTPUT
+
+      - name: Get OS Login SSH Username for Backend
+        id: backend-user
+        run: |
+          BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="backend-sa-${{ inputs.environment }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com")
+          echo "BACKEND_USER=$BACKEND_SSH_USER" >> $GITHUB_OUTPUT
+
+      - name: Create Ansible Inventory
+        run: |
+          cat > ansible/inventory/${{ inputs.environment }}_temp.ini << EOF
+          [backend]
+          ${{ steps.tf-outputs.outputs.backend_ip }} ansible_user=${{ steps.backend-user.outputs.BACKEND_USER }} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+          [backend:vars]
+          ansible_python_interpreter=/usr/bin/python3
+          db_connection_name=${{ steps.tf-outputs.outputs.db_host }}
+          db_host=127.0.0.1
+          db_name=${{ steps.tf-outputs.outputs.db_name }}
+          db_user=${{ steps.tf-outputs.outputs.db_user }}
+          db_password=${{ steps.tf-outputs.outputs.db_password }}
+          EOF
+
+      - name: Run Database Schema Initialization with Ansible
+        run: |
+          ansible-playbook -i ansible/inventory/${{ inputs.environment }}_temp.ini ansible/playbooks/database_init.yml \
+            --extra-vars "db_host=127.0.0.1" \
+            --extra-vars "db_name=${{ steps.tf-outputs.outputs.db_name }}" \
+            --extra-vars "db_user=${{ steps.tf-outputs.outputs.db_user }}" \
+            --extra-vars "db_password=${{ steps.tf-outputs.outputs.db_password }}"
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
