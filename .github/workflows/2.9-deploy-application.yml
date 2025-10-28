@@ -48,10 +48,19 @@ jobs:
           WORKFLOW_SA_EMAIL=$(gcloud config get-value account)
           echo "Checking roles for: $WORKFLOW_SA_EMAIL"
           
-          gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
-            --flatten="bindings[].members" \
-            --format='table(bindings.role)' \
-            --filter="bindings.members:$WORKFLOW_SA_EMAIL"
+          if [ -n "$WORKFLOW_SA_EMAIL" ]; then
+            gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
+              --flatten="bindings[].members" \
+              --format='table(bindings.role)' \
+              --filter="bindings.members:$WORKFLOW_SA_EMAIL"
+          else
+            echo "WARNING: Could not determine authenticated service account"
+            echo "Listing all roles for reference:"
+            gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
+              --flatten="bindings[].members" \
+              --format='table(bindings.role,bindings.members)' \
+              --filter="bindings.members:*github-actions-test*"
+          fi
 
       - name: Terraform Init
         run: terraform init
