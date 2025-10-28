@@ -164,6 +164,9 @@ jobs:
           APP_SA=$(terraform output -raw app_service_account 2>/dev/null || echo "")
           if [ -n "$APP_SA" ]; then
             echo "APP_SA=$APP_SA" >> $GITHUB_ENV
+            # Extract user part from service account email (before the @) for legacy uses
+            APP_USER=$(echo "$APP_SA" | cut -d@ -f1)
+            echo "APP_USER=$APP_USER" >> $GITHUB_ENV
           else
             echo "Could not determine app service account"
             exit 1
@@ -306,8 +309,8 @@ jobs:
           echo "Running Ansible playbook to deploy the application..."
           echo "Backend URL: http://${{ env.BACKEND_INTERNAL_IP }}:3000"
           echo "Database: ${{ env.DB_HOST }} - ${{ env.DB_NAME }}"
-          echo "Bastion User: ${{ env.BASTION_USER }}"
-          echo "App User: ${{ env.APP_USER }}"
+          echo "Bastion OS Login User: ${{ env.BASTION_OS_USER }}"
+          echo "App OS Login User: ${{ env.APP_OS_USER }}"
           
           pwd  # Debug: Check current directory
           ls -la  # Debug: List files in current directory
