@@ -42,6 +42,17 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
+      - name: '[DEBUG] Verify IAM Roles for Workflow SA'
+        run: |
+          echo "--- Verifying IAM roles for the workflow service account ---"
+          WORKFLOW_SA_EMAIL=$(gcloud config get-value account)
+          echo "Checking roles for: $WORKFLOW_SA_EMAIL"
+          
+          gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} \
+            --flatten="bindings[].members" \
+            --format='table(bindings.role)' \
+            --filter="bindings.members:$WORKFLOW_SA_EMAIL"
+
       - name: Terraform Init
         run: terraform init
         working-directory: ./terraform
