@@ -203,10 +203,19 @@ jobs:
           echo "BASTION_OS_USER=$BASTION_OS_USER" >> $GITHUB_ENV
           echo "APP_OS_USER=$APP_OS_USER" >> $GITHUB_ENV
           
-          # Use gcloud compute ssh to automatically add the SSH key to OS Login
-          # This approach uses the compute API which will automatically handle OS Login key management
-          # First try to SSH to the bastion host to trigger automatic key addition
-          echo "SSH key generation completed"
+          # Add the SSH key to OS Login for the bastion service account
+          gcloud compute os-login ssh-keys add \
+            --key-file ~/.ssh/gcp_oslogin_key.pub \
+            --ttl 30m \
+            --account "$BASTION_SA_EMAIL"
+          
+          # Add the SSH key to OS Login for the app service account
+          gcloud compute os-login ssh-keys add \
+            --key-file ~/.ssh/gcp_oslogin_key.pub \
+            --ttl 30m \
+            --account "$APP_SA_EMAIL"
+          
+          echo "SSH key generation and OS Login registration completed"
 
       - name: Setup Python
         uses: actions/setup-python@v4
