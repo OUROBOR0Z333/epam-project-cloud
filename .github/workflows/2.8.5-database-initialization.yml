@@ -117,7 +117,7 @@ jobs:
     - name: Get OS Login SSH Username for Backend
       id: backend-user
       run: |
-        BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="backend-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com")
+        BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com")
         echo "BACKEND_USER=$BACKEND_SSH_USER" >> $GITHUB_OUTPUT
 
     - name: Create Ansible Inventory
