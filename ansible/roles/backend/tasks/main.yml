@@ -1,6 +1,8 @@
 ---
 # tasks/main.yml for backend role
 
+# NOTE: App user/group creation is handled in the pre_tasks of the main playbook
+
 - name: Install Node.js and npm
   apt:
     name: 
@@ -24,7 +26,7 @@
     group: "{{ app_group }}"
     mode: '0755'
 
-- name: Download Cloud SQL Proxy (without checksum verification)
+- name: Download Cloud SQL Proxy
   get_url:
     url: >-
       https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/
@@ -32,18 +34,9 @@
     dest: "{{ cloud_sql_proxy_install_dir }}/cloud-sql-proxy"
     mode: '0755'
     force: yes
-  when: cloud_sql_proxy_sha256 == ""
-
-- name: Download Cloud SQL Proxy (with checksum verification)
-  get_url:
-    url: >-
-      https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases/download/
-      v{{ cloud_sql_proxy_version }}/cloud-sql-proxy.linux.{{ cloud_sql_proxy_arch }}
-    dest: "{{ cloud_sql_proxy_install_dir }}/cloud-sql-proxy"
-    mode: '0755'
-    force: yes
-    checksum: "sha256:{{ cloud_sql_proxy_sha256 }}"
-  when: cloud_sql_proxy_sha256 != ""
+    checksum: >-
+      {{ cloud_sql_proxy_sha256 | length | int > 0
+         | ternary('sha256:' + cloud_sql_proxy_sha256, omit) }}
 
 - name: Install Cloud SQL Proxy service file
   template:
@@ -84,3 +77,9 @@
     enabled: yes
     daemon_reload: yes
   # Create and start the Cloud SQL Proxy service to allow DB connections
+
+- name: Start/Reload backend with PM2
+  command: pm2 start server.js -n movie-analyst-backend --cwd {{ app_dir }}/movie-analyst-api
+  become_user: "{{ app_user }}"
+  register: pm2_backend_started
+  changed_when: "'online' in pm2_backend_started.stdout or pm2_backend_started.rc == 0"

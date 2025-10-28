@@ -23,12 +23,6 @@
   roles:
     - role: backend
   post_tasks:
-    - name: Start backend service with PM2
-      command: pm2 start server.js -n movie-analyst-backend --cwd {{ app_dir }}/movie-analyst-api/movie-analyst-api
-      become_user: "{{ app_user }}"
-      args:
-        creates: ~/.pm2/apps.json
-
     - name: Save PM2 processes
       command: pm2 save
       become_user: "{{ app_user }}"

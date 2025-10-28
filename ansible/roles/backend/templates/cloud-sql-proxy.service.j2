@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/cloud-sql-proxy {{ db_connection_name }} --port 3306 --address 0.0.0.0 --private-ip
+ExecStart=/usr/local/bin/cloud-sql-proxy "{{ db_connection_name }}" --port 3306 --address 0.0.0.0 --private-ip
 Restart=always
 User={{ app_user }}
 
