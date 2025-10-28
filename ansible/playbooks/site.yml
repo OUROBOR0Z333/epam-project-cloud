@@ -84,13 +84,10 @@
       become_user: "{{ app_user }}"
       notify: restart-backend
 
-    - name: Wait for database to be ready
-      wait_for:
-        host: "{{ db_host }}"
-        port: 3306
-        delay: 10
-        timeout: 300
-      delegate_to: localhost
+    - name: Wait briefly before attempting schema initialization
+      pause:
+        seconds: 30
+      # Wait for some time to ensure system is ready before attempting to run seeds.js
 
     - name: Run database schema initialization
       command: node seeds.js
