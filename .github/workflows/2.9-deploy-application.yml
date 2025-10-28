@@ -377,4 +377,4 @@ jobs:
             playbooks/site.yml
         working-directory: ./ansible
         env:
-          ANSIBLE_HOST_KEY_CHECKING: "False"
+          ANSIBLE_HOST_KEY_CHECKING: "False"# Trigger workflow refresh
