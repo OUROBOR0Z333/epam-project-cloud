@@ -59,6 +59,11 @@ output "backend_instance_name" {
   value       = module.app_instances.backend_instance_name
 }
 
+output "backend_internal_ip" {
+  description = "Internal IP of the backend instance"
+  value       = module.app_instances.backend_internal_ip
+}
+
 output "app_service_account" {
   description = "Service account for app instances"
   value       = module.app_instances.app_service_account
