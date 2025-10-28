@@ -243,6 +243,28 @@ jobs:
           echo "    StrictHostKeyChecking no" >> ~/.ssh/config
           echo "    UserKnownHostsFile /dev/null" >> ~/.ssh/config
           echo "    ConnectTimeout 10" >> ~/.ssh/config
+          
+          # Define bastion host configuration for clean proxy setup
+          echo "" >> ~/.ssh/config
+          echo "Host bastion" >> ~/.ssh/config
+          echo "    HostName ${{ env.BASTION_IP }}" >> ~/.ssh/config
+          echo "    User ${{ env.OS_LOGIN_USER }}" >> ~/.ssh/config
+          echo "    IdentityFile ~/.ssh/gcp_oslogin_key" >> ~/.ssh/config
+          
+          # Define target hosts that go through bastion
+          echo "" >> ~/.ssh/config
+          echo "Host backend" >> ~/.ssh/config
+          echo "    HostName ${{ env.BACKEND_INTERNAL_IP }}" >> ~/.ssh/config
+          echo "    User ${{ env.OS_LOGIN_USER }}" >> ~/.ssh/config
+          echo "    IdentityFile ~/.ssh/gcp_oslogin_key" >> ~/.ssh/config
+          echo "    ProxyJump bastion" >> ~/.ssh/config
+          
+          echo "" >> ~/.ssh/config
+          echo "Host frontend" >> ~/.ssh/config
+          echo "    HostName 10.0.2.3" >> ~/.ssh/config  # Default frontend IP
+          echo "    User ${{ env.OS_LOGIN_USER }}" >> ~/.ssh/config
+          echo "    IdentityFile ~/.ssh/gcp_oslogin_key" >> ~/.ssh/config
+          echo "    ProxyJump bastion" >> ~/.ssh/config
 
       - name: Create dynamic inventory for application deployment
         run: |
@@ -266,19 +288,13 @@ jobs:
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --format="value(instance.basename())" 2>/dev/null)
           
-          # Define the ProxyCommand using the single, correct POSIX username
-          # Include the private key for authentication in both hops
-          # Note: No extra quotes around the SSH command to avoid literal quote passing to ssh
-          PROXY_COMMAND="ssh -i ~/.ssh/gcp_oslogin_key -W %h:%p -q -o StrictHostKeyChecking=no ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}"
-          SSH_COMMON_ARGS="-o ProxyCommand=\"$PROXY_COMMAND\""
-          
           # Create the inventory file
           echo "# ${{ inputs.environment }} environment inventory file - Auto-generated for deployment" > ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[bastion]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-          echo "${{ env.BASTION_IP }} ansible_user=${{ env.OS_LOGIN_USER }}" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "${{ env.BASTION_IP }} ansible_host=${{ env.BASTION_IP }} ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[backend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-          echo "${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "backend ansible_host=${{ env.BACKEND_INTERNAL_IP }} ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key ansible_ssh_common_args='-o ControlMaster=no -o ControlPersist=no -o StrictHostKeyChecking=no'" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           echo "[frontend]" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
@@ -295,17 +311,16 @@ jobs:
                   --format="value(networkInterfaces[0].networkIP)" 2>/dev/null)
                 
                 if [ -n "$INSTANCE_INTERNAL_IP" ]; then
-                  echo "$INSTANCE_INTERNAL_IP ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+                  echo "frontend-${instance} ansible_host=$INSTANCE_INTERNAL_IP ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key ansible_ssh_common_args='-o ControlMaster=no -o ControlPersist=no -o StrictHostKeyChecking=no'" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 else
                   echo "# Could not resolve internal IP for $instance" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
                 fi
               fi
             done <<< "$INSTANCES"
           else
-            # If no instances found in the group, we may need to handle this differently
-            # For now, add a placeholder based on subnet convention
+            # If no instances found in the group, default to a standard IP
             echo "# No running instances found in $FRONTEND_IG, using standard IP convention" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
-            echo "10.0.2.3 ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_common_args=\"$SSH_COMMON_ARGS\" ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
+            echo "frontend ansible_host=10.0.2.3 ansible_user=${{ env.OS_LOGIN_USER }} ansible_ssh_private_key_file=~/.ssh/gcp_oslogin_key ansible_ssh_common_args='-o ControlMaster=no -o ControlPersist=no -o StrictHostKeyChecking=no'" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
           fi
           
           echo "" >> ./ansible/inventory/${{ inputs.environment }}_temp.ini
@@ -321,9 +336,8 @@ jobs:
           echo "Generated inventory file:"
           cat ./ansible/inventory/${{ inputs.environment }}_temp.ini
           
-          # Debug: show the proxy command line to verify it's formatted correctly
-          echo "Checking the proxy command line:"
-          grep "ProxyCommand" ./ansible/inventory/${{ inputs.environment }}_temp.ini
+          echo "SSH config file contents:"
+          cat ~/.ssh/config
         working-directory: .
 
       - name: '[DEBUG] Definitive IAM Permissions Test'
@@ -357,6 +371,9 @@ jobs:
           echo "--> Checking for SSH key files..."
           ls -la ~/.ssh
 
+          echo "--> SSH config file contents:"
+          cat ~/.ssh/config
+
           echo "--> Verifying the public key is associated with the WORKFLOW's Service Account in OS Login..."
           # This command checks what GCP knows about the SA running this workflow
           # We expect to see the public key from gcp_oslogin_key.pub in the output.
@@ -365,23 +382,27 @@ jobs:
           echo "
           [Step 2: Testing Hop 1 - Direct Connection to Bastion]
           "
-          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }} 'echo \"SUCCESS: Connected to Bastion\"'"
-          ssh -vvv -i ~/.ssh/gcp_oslogin_key ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }} 'echo "SUCCESS: Connected to Bastion"'
+          echo "--> Running: ssh -vvv bastion 'echo \"SUCCESS: Connected to Bastion\"'"
+          ssh -vvv bastion 'echo "SUCCESS: Connected to Bastion"'
           SSH_EXIT_CODE=$?
           echo "--> Bastion SSH command exited with code: $SSH_EXIT_CODE"
 
-
           echo "
-          [Step 3: Testing Hop 2 - Proxied Connection to Backend]
+          [Step 3: Testing Hop 2 - Proxied Connection to Backend via ProxyJump]
           "
-          PROXY_COMMAND="ssh -vvv -i ~/.ssh/gcp_oslogin_key -W %h:%p ${{ env.OS_LOGIN_USER }}@${{ env.BASTION_IP }}"
-          echo "--> Running: ssh -vvv -i ~/.ssh/gcp_oslogin_key -o 'ProxyCommand=${PROXY_COMMAND}' ${{ env.OS_LOGIN_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo \"SUCCESS: Connected to Backend\"'"
-          ssh -vvv -i ~/.ssh/gcp_oslogin_key -o "ProxyCommand=${PROXY_COMMAND}" ${{ env.OS_LOGIN_USER }}@${{ env.BACKEND_INTERNAL_IP }} 'echo "SUCCESS: Connected to Backend"'
+          echo "--> Running: ssh -vvv backend 'echo \"SUCCESS: Connected to Backend\"'"
+          ssh -vvv backend 'echo "SUCCESS: Connected to Backend"'
           SSH_EXIT_CODE=$?
           echo "--> Backend SSH command exited with code: $SSH_EXIT_CODE"
 
           echo "--- FINISHED EXTENSIVE SSH DEBUG ---"
 
+      - name: Clean up any existing SSH control sockets
+        run: |
+          # Remove any existing control sockets to prevent reuse of old connections
+          rm -rf ~/.ansible/cp/
+          mkdir -p ~/.ansible/cp/
+          
       - name: Run Ansible Playbook for Application Deployment
         run: |
           echo "Running Ansible playbook to deploy the application..."
@@ -393,10 +414,20 @@ jobs:
           ls -la  # Debug: List files in current directory
           ls -la inventory/  # Debug: List files in inventory directory
           
+          # Additional debug for SSH connection
+          echo "Checking SSH config..."
+          cat ~/.ssh/config
+          
+          echo "Attempting to ping backend host first..."
+          ansible -i inventory/${{ inputs.environment }}_temp.ini backend -m ping -vvv
+          
+          echo "Running Ansible playbook..."
           ansible-playbook \
             -i inventory/${{ inputs.environment }}_temp.ini \
             --extra-vars "db_host=${{ env.DB_HOST }} db_name=${{ env.DB_NAME }} db_user=${{ env.DB_USER }} db_password='${{ env.DB_PASSWORD }}' backend_url=http://${{ env.BACKEND_INTERNAL_IP }}:3000" \
             playbooks/site.yml
         working-directory: ./ansible
         env:
-          ANSIBLE_HOST_KEY_CHECKING: "False"# Trigger workflow refresh
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+          ANSIBLE_SSH_ARGS: "-F ~/.ssh/config -o ControlMaster=no -o ControlPersist=no -o ConnectTimeout=10"
+          ANSIBLE_CONFIG: "ansible.cfg"
