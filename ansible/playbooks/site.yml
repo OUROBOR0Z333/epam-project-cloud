@@ -57,6 +57,7 @@
         repo: https://github.com/aljoveza/devops-rampup.git
         dest: "{{ app_dir }}/movie-analyst-api"
         force: yes
+        depth: 1
       become_user: "{{ app_user }}"
       notify: restart-backend
 
@@ -74,6 +75,7 @@
         owner: "{{ app_user }}"
         group: "{{ app_group }}"
         mode: '0644'
+      become_user: "{{ app_user }}"
       notify: restart-backend
 
     - name: Start backend service with PM2
@@ -150,6 +152,7 @@
         repo: https://github.com/aljoveza/devops-rampup.git
         dest: "{{ app_dir }}/movie-analyst-ui"
         force: yes
+        depth: 1
       become_user: "{{ app_user }}"
       notify: restart-frontend
 
@@ -167,6 +170,7 @@
         owner: "{{ app_user }}"
         group: "{{ app_group }}"
         mode: '0644'
+      become_user: "{{ app_user }}"
       notify: restart-frontend
 
     - name: Start frontend service with PM2
