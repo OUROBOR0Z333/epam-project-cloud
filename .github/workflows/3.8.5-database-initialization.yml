@@ -120,8 +120,9 @@ jobs:
           exit 1
         fi
         
-        # Create the inventory file with IAP tunnel configuration using heredoc
-        cat > "ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini" <<EOF
+        # Create the inventory file with IAP tunnel configuration
+        # Using printf to avoid YAML indentation issues
+        cat > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini << 'EOF'
 [backend]
 $BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args='-o ProxyCommand="gcloud compute start-iap-tunnel backend-qa 22 --zone=us-central1-a --project=$PROJECT_ID --impersonate-service-account=app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --verbosity=error --listen-on-stdin" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
