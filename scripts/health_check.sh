@@ -94,8 +94,48 @@ else
     exit 1
 fi
 
-# 6. Check Cloud SQL Proxy on backend
-log "6. Checking if Cloud SQL Proxy is running on backend..."
+# 6. Check if application code is properly copied to instances
+log "6. Checking if application code is properly copied to instances..."
+
+# Check for backend application files
+BACKEND_CODE_EXISTS=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="test -d /opt/movie-analyst/movie-analyst-api/movie-analyst-api && test -f /opt/movie-analyst/movie-analyst-api/movie-analyst-api/server.js && echo 'exists'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "not_found")
+if [ "$BACKEND_CODE_EXISTS" = "exists" ]; then
+    log "✓ Backend application code exists and server.js found"
+else
+    log "✗ Backend application code is missing or incomplete"
+    exit 1
+fi
+
+# Check for frontend application files
+FRONTEND_CODE_EXISTS=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="test -d /opt/movie-analyst/movie-analyst-ui/movie-analyst-ui && test -f /opt/movie-analyst/movie-analyst-ui/movie-analyst-ui/server.js && echo 'exists'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $FRONTEND_VM_NAME 2>/dev/null || echo "not_found")
+if [ "$FRONTEND_CODE_EXISTS" = "exists" ]; then
+    log "✓ Frontend application code exists and server.js found"
+else
+    log "✗ Frontend application code is missing or incomplete"
+    exit 1
+fi
+
+# 7. Check if Node.js dependencies are installed
+log "7. Checking if Node.js dependencies are installed..."
+
+# Check for backend dependencies
+BACKEND_DEPS_EXIST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="test -d /opt/movie-analyst/movie-analyst-api/movie-analyst-api/node_modules && ls /opt/movie-analyst/movie-analyst-api/movie-analyst-api/node_modules | grep -q 'package.json\|express\|mysql' && echo 'exists'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "not_found")
+if [ "$BACKEND_DEPS_EXIST" = "exists" ]; then
+    log "✓ Backend dependencies are installed"
+else
+    log "⚠ Backend dependencies may not be properly installed (this could cause runtime issues)"
+fi
+
+# Check for frontend dependencies
+FRONTEND_DEPS_EXIST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="test -d /opt/movie-analyst/movie-analyst-ui/movie-analyst-ui/node_modules && ls /opt/movie-analyst/movie-analyst-ui/movie-analyst-ui/node_modules | grep -q 'package.json\|express\|ejs' && echo 'exists'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $FRONTEND_VM_NAME 2>/dev/null || echo "not_found")
+if [ "$FRONTEND_DEPS_EXIST" = "exists" ]; then
+    log "✓ Frontend dependencies are installed"
+else
+    log "⚠ Frontend dependencies may not be properly installed (this could cause runtime issues)"
+fi
+
+# 8. Check Cloud SQL Proxy on backend
+log "8. Checking if Cloud SQL Proxy is running on backend..."
 if gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="sudo systemctl is-active cloud-sql-proxy" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null | grep -q "active"; then
     log "✓ Cloud SQL Proxy is running on backend"
 else
@@ -105,14 +145,17 @@ fi
 
 # 7. Test FE → BE connectivity
 log "7. Testing Frontend → Backend connectivity..."
-if gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="curl -s -o /dev/null -w '%{http_code}' http://$BACKEND_INTERNAL_IP:$BACKEND_PORT/movies" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $FRONTEND_VM_NAME 2>/dev/null | grep -q "200\|500"; then
-    RESPONSE_CODE=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="curl -s -o /dev/null -w '%{http_code}' http://$BACKEND_INTERNAL_IP:$BACKEND_PORT/movies" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $FRONTEND_VM_NAME 2>/dev/null)
+if gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="timeout 10 curl -s -o /dev/null -w '%{http_code}' http://$BACKEND_INTERNAL_IP:$BACKEND_PORT/movies" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $FRONTEND_VM_NAME 2>/dev/null; then
+    RESPONSE_CODE=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="timeout 10 curl -s -o /dev/null -w '%{http_code}' http://$BACKEND_INTERNAL_IP:$BACKEND_PORT/movies" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $FRONTEND_VM_NAME 2>/dev/null)
     if [ "$RESPONSE_CODE" = "200" ]; then
         log "✓ Frontend can reach Backend (Response: $RESPONSE_CODE)"
     elif [ "$RESPONSE_CODE" = "500" ]; then
         log "! Frontend can reach Backend but Backend is returning 500 errors (Response: $RESPONSE_CODE)"
     else
         log "✗ Frontend cannot reach Backend (Response: $RESPONSE_CODE)"
+        # Check backend logs to understand the error
+        log "Checking backend logs for authentication errors..."
+        gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="sudo -u app pm2 logs movie-analyst-backend --lines 10 2>/dev/null || echo 'Cannot access backend logs'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null
         exit 1
     fi
 else
