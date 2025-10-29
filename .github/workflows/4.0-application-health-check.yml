@@ -1,0 +1,49 @@
+name: '4.0 - Application Health Check'
+
+on:
+  workflow_dispatch:  # Allows manual triggering
+  schedule:
+    # Runs every hour - adjust as needed
+    - cron: '0 * * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/health_check.sh'
+
+env:
+  TF_WORKSPACE: qa
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    environment: qa
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        token_format: access_token
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Install jq
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
+
+    - name: Run Health Check
+      run: |
+        chmod +x scripts/health_check.sh
+        ./scripts/health_check.sh
+      env:
+        GITHUB_ACTIONS: true
+        PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}

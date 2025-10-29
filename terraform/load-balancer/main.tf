@@ -6,6 +6,7 @@ resource "google_compute_http_health_check" "default" {
   timeout_sec         = 2
   unhealthy_threshold = 3
   healthy_threshold   = 2
+  port                = 3030  # Port where frontend application is running
 }
 
 # Backend service
@@ -17,7 +18,9 @@ resource "google_compute_backend_service" "default" {
   enable_cdn            = false
   health_checks         = [google_compute_http_health_check.default.self_link]
   backend {
-    group = var.backend_instance_group
+    group          = var.backend_instance_group
+    # This tells the load balancer which port to send traffic to on the instances
+    # The health check port (3030) will be used for backend communication
   }
 }
 
