@@ -45,9 +45,12 @@ fi
 # 2. Check database connectivity from backend
 log "2. Testing database connectivity from backend..."
 # Extract the password from the env file using more robust method to handle special characters
-DB_PASSWORD=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2-" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null | tr -d '\r\n')
-DB_TEST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p'$DB_PASSWORD' -e 'USE movie_db; SELECT COUNT(*) FROM movies LIMIT 1;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
-if echo "$DB_TEST" | grep -q "SELECT COUNT(*) FROM movies LIMIT 1" && ! echo "$DB_TEST" | grep -q "error"; then
+DB_PASSWORD=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="sudo cat /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | grep DB_PASSWORD | cut -d '=' -f 2-" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null | tr -d '\r\n')
+log "Debug: Retrieved database password (length: ${#DB_PASSWORD})"
+# Debug: Test the connection with an echo of what we're executing
+DB_TEST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p'$DB_PASSWORD' -e 'USE movie_db; SELECT COUNT(*) FROM movies LIMIT 1;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>&1)
+log "Debug: Full DB_TEST result: $DB_TEST"
+if echo "$DB_TEST" | grep -q "COUNT(*)" && ! echo "$DB_TEST" | grep -q "error\|Error\|ERROR" && ! echo "$DB_TEST" | grep -q "Access denied"; then
     log "✓ Backend can connect to database"
 else
     log "✗ Backend cannot connect to database"
