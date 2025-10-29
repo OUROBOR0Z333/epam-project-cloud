@@ -95,11 +95,18 @@ jobs:
         SERVICE_ACCOUNT_EMAIL="app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
         echo "Service account to impersonate: $SERVICE_ACCOUNT_EMAIL"
         
+        # Test if service account exists first
+        if ! gcloud iam service-accounts describe "$SERVICE_ACCOUNT_EMAIL" --project="${{ secrets.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+          echo "::error ::Service account $SERVICE_ACCOUNT_EMAIL does not exist"
+          exit 1
+        fi
+        
         BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="$SERVICE_ACCOUNT_EMAIL")
         
         # Verify the SSH user was retrieved
         if [ -z "$BACKEND_SSH_USER" ]; then
           echo "::error ::Failed to retrieve OS Login SSH username"
+          echo "This may indicate impersonation permissions issues"
           exit 1
         fi
         
@@ -122,11 +129,12 @@ jobs:
         DB_USER="${{ steps.tf-outputs.outputs.db_user }}"
         DB_PASSWORD="${{ steps.tf-outputs.outputs.db_password }}"
         
-        # Sanity-check variables before writing the inventory file
-        for v in BACKEND_IP BACKEND_USER DB_HOST DB_NAME DB_USER DB_PASSWORD; do
-          printf '%-15s %s\n' "$v" "${!v}"
-          [ -z "${!v}" ] && { echo "::error ::$v is empty"; exit 1; }
-        done
+        # Check if BACKEND_USER is empty and handle appropriately
+        if [ -z "$BACKEND_USER" ]; then
+          echo "::error ::BACKEND_USER is empty - failed to retrieve OS Login SSH username"
+          echo "This may indicate an issue with service account impersonation"
+          exit 1
+        fi
         
         # Create the inventory file with proper variable substitution
         # Using printf to avoid heredoc indentation issues in YAML
