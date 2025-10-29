@@ -18,62 +18,7 @@
         seconds: 30
       # Allow time for the Cloud SQL Proxy to establish connection
 
-    - name: Create database schema
-      mysql_db:
-        login_host: "{{ db_host }}"
-        login_user: "{{ db_user }}"
-        login_password: "{{ db_password }}"
-        name: "{{ db_name }}"
-        state: present
-      register: db_creation_result
-
-    - name: Create publications table
-      mysql_query:
-        login_host: "{{ db_host }}"
-        login_user: "{{ db_user }}"
-        login_password: "{{ db_password }}"
-        login_db: "{{ db_name }}"
-        query: |
-          CREATE TABLE IF NOT EXISTS publications (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            avatar VARCHAR(255)
-          )
-      register: publications_table_result
-
-    - name: Create reviewers table
-      mysql_query:
-        login_host: "{{ db_host }}"
-        login_user: "{{ db_user }}"
-        login_password: "{{ db_password }}"
-        login_db: "{{ db_name }}"
-        query: |
-          CREATE TABLE IF NOT EXISTS reviewers (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            publication VARCHAR(255) NOT NULL,
-            avatar VARCHAR(255)
-          )
-      register: reviewers_table_result
-
-    - name: Create movies table
-      mysql_query:
-        login_host: "{{ db_host }}"
-        login_user: "{{ db_user }}"
-        login_password: "{{ db_password }}"
-        login_db: "{{ db_name }}"
-        query: |
-          CREATE TABLE IF NOT EXISTS movies (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            title VARCHAR(255) NOT NULL,
-            release_year VARCHAR(4) NOT NULL,
-            score INT NOT NULL,
-            reviewer VARCHAR(255) NOT NULL,
-            publication VARCHAR(255) NOT NULL
-          )
-      register: movies_table_result
-
-    - name: Run database schema initialization (seeds)
+    - name: Run database schema initialization
       command: node seeds.js
       args:
         chdir: "{{ app_dir }}/movie-analyst-api/movie-analyst-api"
