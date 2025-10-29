@@ -1,0 +1,100 @@
+digraph G {
+    rankdir=TB;
+    node [shape=box, style=filled, fillcolor=white];
+    
+    // GitHub Repository
+    repo [label="GitHub Repository", shape=folder, fillcolor=lightblue];
+    
+    // Foundation Workflows (1.x)
+    subgraph cluster_foundation {
+        label="Foundation Workflows (1.x)";
+        style=filled;
+        fillcolor=lightgray;
+        
+        f11 [label="1.1 Basic Test", fillcolor=lightyellow];
+        f12 [label="1.2 GCP Test", fillcolor=lightyellow];
+        f13 [label="1.3 Terraform GCP Test", fillcolor=lightyellow];
+        f14 [label="1.4 GCP Auth Test", fillcolor=lightyellow];
+        f15 [label="1.5 Create Bucket", fillcolor=lightyellow];
+        f16 [label="1.6 Delete Bucket", fillcolor=lightyellow];
+        f17 [label="1.7 Configure Backend", fillcolor=lightyellow];
+    }
+    
+    // Infrastructure Deployment (2.x)
+    subgraph cluster_infra {
+        label="Infrastructure Deployment (2.x)";
+        style=filled;
+        fillcolor=lightcyan;
+        
+        i22a [label="2.2 Complete Deployment", fillcolor=lightgreen];
+        i22b [label="2.2 Complete Deployment Secure", fillcolor=lightgreen];
+    }
+    
+    // Application Deployment (3.x)
+    subgraph cluster_app {
+        label="Application Deployment (3.x)";
+        style=filled;
+        fillcolor=lightpink;
+        
+        a385 [label="3.8.5 Database Init", fillcolor=orange];
+        a39a [label="3.9 Deploy Application", fillcolor=orange];
+        a39b [label="3.9 Infra Test Config", fillcolor=orange];
+    }
+    
+    // Monitoring (4.x)
+    subgraph cluster_monitor {
+        label="Monitoring (4.x)";
+        style=filled;
+        fillcolor=lightcoral;
+        
+        m40 [label="4.0 App Health Check", fillcolor=red];
+        m41 [label="4.1 DB Health Check", fillcolor=red];
+    }
+    
+    // GCP
+    gcp [label="Google Cloud Platform", shape=cloud, fillcolor=lightblue];
+    
+    // Terraform
+    terraform [label="Terraform (IaC)", fillcolor=lightyellow];
+    
+    // Ansible
+    ansible [label="Ansible (Config Mgmt)", fillcolor=lightyellow];
+    
+    // Infrastructure Components
+    infra [label="GCP Infrastructure\n(VPC, VMs, DB, LB)", fillcolor=lightgreen];
+    
+    // Application
+    app [label="Deployed Application\n(Frontend & Backend)", fillcolor=orange];
+    
+    // Connections
+    repo -> f11 [label="Trigger"];
+    f11 -> f12 -> f13 -> f14 -> f15 -> f16 -> f17;
+    f17 -> i22a [label="Ready"];
+    f17 -> i22b [label="Ready"];
+    i22a -> terraform -> gcp -> infra;
+    i22b -> terraform -> gcp -> infra;
+    infra -> a385 [label="Ready"];
+    infra -> a39a [label="Ready"];
+    infra -> a39b [label="Ready"];
+    a385 -> ansible -> app;
+    a39a -> ansible -> app;
+    a39b -> ansible -> app;
+    app -> m40 [label="Monitor"];
+    app -> m41 [label="Monitor"];
+    
+    // Manual triggers
+    m40 -> app [style=dashed, label="Manual Trigger"];
+    m41 -> app [style=dashed, label="Manual Trigger"];
+    
+    // Legend
+    subgraph cluster_legend {
+        label="Legend";
+        style=solid;
+        legend_repo [shape=plaintext, label="Repository"];
+        legend_workflow [shape=plaintext, label="Workflow"];
+        legend_gcp [shape=plaintext, label="GCP Platform"];
+        legend_tool [shape=plaintext, label="Tool (Terraform/Ansible)"];
+        legend_infra [shape=plaintext, label="Infrastructure"];
+        legend_app [shape=plaintext, label="Application"];
+    }
+}
