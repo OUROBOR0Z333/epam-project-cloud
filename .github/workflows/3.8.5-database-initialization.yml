@@ -70,6 +70,7 @@ jobs:
         DB_USER=$(jq -r '.database_user.value' tfoutputs.json)
         DB_PASSWORD=$(jq -r '.database_password.value' tfoutputs.json)
         BACKEND_IP=$(jq -r '.backend_internal_ip.value' tfoutputs.json)
+        PROJECT_ID=$(jq -r '.project_id.value' tfoutputs.json)
         
         # Export to environment
         echo "DB_HOST=$DB_HOST" >> "$GITHUB_ENV"
@@ -77,6 +78,7 @@ jobs:
         echo "DB_USER=$DB_USER" >> "$GITHUB_ENV"
         echo "DB_PASSWORD=$DB_PASSWORD" >> "$GITHUB_ENV"
         echo "BACKEND_IP=$BACKEND_IP" >> "$GITHUB_ENV"
+        echo "PROJECT_ID=$PROJECT_ID" >> "$GITHUB_ENV"
         
         # Print for visibility
         echo "DB_HOST=$DB_HOST"
@@ -84,6 +86,7 @@ jobs:
         echo "DB_USER=$DB_USER"
         echo "DB_PASSWORD=<sensitive>"
         echo "BACKEND_IP=$BACKEND_IP"
+        echo "PROJECT_ID=$PROJECT_ID"
 
     - name: Get OS-Login user (show full error)
       run: |
@@ -117,11 +120,11 @@ jobs:
           exit 1
         fi
         
-        # Create the inventory file with proper variable substitution
+        # Create the inventory file with IAP tunnel configuration
         # Using printf to avoid heredoc indentation issues in YAML
         {
         echo "[backend]"
-        echo "$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'"
+        echo "$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args=\"-o ProxyCommand='gcloud compute start-iap-tunnel $BACKEND_IP 22 --zone=us-central1-a --project=$PROJECT_ID --impersonate-service-account=app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --verbosity=error'\""
         echo ""
         echo "[backend:vars]"
         echo "ansible_python_interpreter=/usr/bin/python3"
