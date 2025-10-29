@@ -106,6 +106,21 @@ jobs:
         echo "BACKEND_USER=$BACKEND_USER" >> "$GITHUB_ENV"
         echo "Final BACKEND_USER: $BACKEND_USER"
 
+    - name: Create throw-away SSH key
+      run: |
+        ssh-keygen -t ed25519 -N '' -f /tmp/gha_key
+        echo "ANSIBLE_PRIVATE_KEY_FILE=/tmp/gha_key" >> "$GITHUB_ENV"
+
+    - name: Authorise key via OS-Login
+      env:
+        PUB_KEY: "$(cat /tmp/gha_key.pub)"
+        APP_SA: "app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+      run: |
+        gcloud compute os-login ssh-keys add \
+          --key="$PUB_KEY" \
+          --ttl=15m \
+          --impersonate-service-account="$APP_SA"
+
     - name: Create Ansible Inventory
       run: |
         set -euo pipefail  # abort on any unset var or non-zero exit
@@ -152,3 +167,4 @@ jobs:
           --extra-vars "db_password=$DB_PASSWORD"
       env:
         ANSIBLE_HOST_KEY_CHECKING: False
+        ANSIBLE_PRIVATE_KEY_FILE: /tmp/gha_key
