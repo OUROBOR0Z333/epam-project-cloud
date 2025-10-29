@@ -193,6 +193,28 @@ else
     exit 1
 fi
 
+# 10. Check if the schema initialization has been run by checking for expected data
+log "10. Checking if database schema initialization has been completed properly..."
+EXPECTED_DATA_CHECK=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SELECT COUNT(*) AS total_movies FROM movies; SELECT COUNT(*) AS total_publications FROM publications; SELECT COUNT(*) AS total_reviewers FROM reviewers;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
+
+if echo "$EXPECTED_DATA_CHECK" | grep -q -E -i "(total_movies|total_publications|total_reviewers|total)" && ! echo "$EXPECTED_DATA_CHECK" | grep -q -i "ERROR"; then
+    MOVIES_COUNT=$(echo "$EXPECTED_DATA_CHECK" | grep -E "^[0-9]+$" | head -n 1)
+    PUBLICATIONS_COUNT=$(echo "$EXPECTED_DATA_CHECK" | grep -E "^[0-9]+$" | sed -n '2p')
+    REVIEWERS_COUNT=$(echo "$EXPECTED_DATA_CHECK" | grep -E "^[0-9]+$" | sed -n '3p')
+    
+    log "✓ Schema initialization validated (Movies: $MOVIES_COUNT, Publications: $PUBLICATIONS_COUNT, Reviewers: $REVIEWERS_COUNT)"
+    
+    # Check if the data looks like it was properly initialized by seeds.js
+    if [ "$MOVIES_COUNT" -gt 0 ] && [ "$PUBLICATIONS_COUNT" -gt 0 ] && [ "$REVIEWERS_COUNT" -gt 0 ]; then
+        log "✓ Database contains expected initial data from schema initialization"
+    else
+        log "! Database tables exist but expected initial data is missing"
+    fi
+else
+    log "✗ Database schema initialization validation failed"
+    exit 1
+fi
+
 # 9. Smoke test via Load Balancer
 log "9. Testing via Load Balancer..."
 if curl -s -o /dev/null -w '%{http_code}' -I http://$LOAD_BALANCER_IP 2>/dev/null | grep -q "200"; then

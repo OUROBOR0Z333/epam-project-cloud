@@ -15,9 +15,10 @@ The health check script performs the following checks:
 7. **Cloud SQL Proxy status** - Ensures the Cloud SQL Proxy is running on the backend VM
 8. **Database connectivity** - Verifies the backend can connect to the database
 9. **Database schema verification** - Checks if database tables exist and are populated with data
-10. **Frontend ↔ Backend connectivity** - Tests if the frontend can reach the backend API
-11. **Load balancer accessibility** - Checks if the load balancer is responding
-12. **Backend API endpoints** - Tests if backend API endpoints are accessible through the load balancer
+10. **Schema initialization validation** - Confirms database contains expected initial data from seeds.js
+11. **Frontend ↔ Backend connectivity** - Tests if the frontend can reach the backend API
+12. **Load balancer accessibility** - Checks if the load balancer is responding
+13. **Backend API endpoints** - Tests if backend API endpoints are accessible through the load balancer
 
 ## Prerequisites
 
