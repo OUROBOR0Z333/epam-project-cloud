@@ -120,22 +120,19 @@ jobs:
           exit 1
         fi
         
-        # Create the inventory file with IAP tunnel configuration
-        # Using printf to avoid heredoc indentation issues in YAML
-        {
-        echo "[backend]"
-        echo "$BACKEND_IP ansible_user=$BACKEND_USER"
-        echo "  ansible_ssh_common_args='-o ProxyCommand=\"gcloud compute start-iap-tunnel backend-qa 22 --zone=us-central1-a --project=$PROJECT_ID --impersonate-service-account=app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --verbosity=error --listen-on-stdin\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'"
-        echo ""
-        echo "[backend:vars]"
-        echo "ansible_python_interpreter=/usr/bin/python3"
-        echo "db_connection_name=$DB_HOST"
-        echo "db_host=127.0.0.1"
-        echo "db_name=$DB_NAME"
-        echo "db_user=$DB_USER"
-        echo "db_password=$DB_PASSWORD"
-        } > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        # Create the inventory file with IAP tunnel configuration using heredoc
+        cat > "ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini" <<EOF
+[backend]
+$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args='-o ProxyCommand="gcloud compute start-iap-tunnel backend-qa 22 --zone=us-central1-a --project=$PROJECT_ID --impersonate-service-account=app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --verbosity=error --listen-on-stdin" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
+[backend:vars]
+ansible_python_interpreter=/usr/bin/python3
+db_connection_name=$DB_HOST
+db_host=127.0.0.1
+db_name=$DB_NAME
+db_user=$DB_USER
+db_password=$DB_PASSWORD
+EOF
 
         echo 'Inventory generated:'
         cat ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
