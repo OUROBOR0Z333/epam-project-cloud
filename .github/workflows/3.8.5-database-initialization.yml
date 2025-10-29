@@ -108,18 +108,27 @@ jobs:
 
     - name: Create throw-away SSH key
       run: |
+        set -e
         ssh-keygen -t ed25519 -N '' -f /tmp/gha_key
+        chmod 600 /tmp/gha_key               # safety
         echo "ANSIBLE_PRIVATE_KEY_FILE=/tmp/gha_key" >> "$GITHUB_ENV"
 
     - name: Authorise key via OS-Login
       env:
-        PUB_KEY: "$(cat /tmp/gha_key.pub)"
         APP_SA: "app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
       run: |
+        set -e
+        PUB_KEY="$(cat /tmp/gha_key.pub)"
         gcloud compute os-login ssh-keys add \
-          --key="$PUB_KEY" \
-          --ttl=15m \
-          --impersonate-service-account="$APP_SA"
+            --key="$PUB_KEY" \
+            --ttl=15m \
+            --impersonate-service-account="$APP_SA"
+        echo "Key added for $APP_SA"
+
+        # optional: confirm it really is there
+        gcloud compute os-login ssh-keys list \
+            --impersonate-service-account="$APP_SA" \
+            --format='table(key[:50],expirationTime)'
 
     - name: Create Ansible Inventory
       run: |
