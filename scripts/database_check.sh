@@ -50,7 +50,8 @@ log "Debug: Retrieved database password (length: ${#DB_PASSWORD})"
 # Debug: Test the connection with an echo of what we're executing
 DB_TEST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p'$DB_PASSWORD' -e 'USE movie_db; SELECT COUNT(*) FROM movies LIMIT 1;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>&1)
 log "Debug: Full DB_TEST result: $DB_TEST"
-if echo "$DB_TEST" | grep -q "COUNT(*)" && ! echo "$DB_TEST" | grep -q "error\|Error\|ERROR" && ! echo "$DB_TEST" | grep -q "Access denied"; then
+# Check if we have the expected result (COUNT(*) followed by a number) in the output, ignoring warnings and other messages
+if echo "$DB_TEST" | grep -q "COUNT(*)" && echo "$DB_TEST" | grep -q "40" && ! echo "$DB_TEST" | grep -qi "error" && ! echo "$DB_TEST" | grep -q "Access denied"; then
     log "✓ Backend can connect to database"
 else
     log "✗ Backend cannot connect to database"
