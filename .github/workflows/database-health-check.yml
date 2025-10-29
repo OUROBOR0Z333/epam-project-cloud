@@ -1,10 +1,7 @@
 name: 4.1 Database – Health Check
 
 on:
-  workflow_dispatch: # Allows manual trigger
-  schedule:
-    # Run every hour - adjust as needed
-    - cron: '0 * * * *'
+  workflow_dispatch: # Allows manual trigger only
 
 env:
   TF_WORKSPACE: qa
