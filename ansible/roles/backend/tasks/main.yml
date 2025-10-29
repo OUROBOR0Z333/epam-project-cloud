@@ -64,9 +64,21 @@
 
 - name: Install Python MySQL client for Ansible database management
   apt:
-    name: python3-pymysql
+    name: 
+      - python3-pymysql
+      - python3-mysqldb
     state: present
     update_cache: yes
+
+- name: Verify Python MySQL modules are available
+  command: python3 -c "import pymysql; import MySQLdb"
+  ignore_errors: yes
+  register: python_mysql_check
+
+- name: Debug - Show Python MySQL check result
+  debug:
+    msg: "Python MySQL modules check: {{ python_mysql_check.stdout_lines | default('Not available') }}"
+  when: python_mysql_check is defined
 
 - name: Create database schema
   mysql_db:
@@ -77,6 +89,8 @@
     state: present
   register: db_creation_result
   ignore_errors: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
 
 - name: Create publications table
   mysql_query:
@@ -92,6 +106,8 @@
       )
   register: publications_table_result
   ignore_errors: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
 
 - name: Create reviewers table
   mysql_query:
@@ -108,6 +124,8 @@
       )
   register: reviewers_table_result
   ignore_errors: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
 
 - name: Create movies table
   mysql_query:
@@ -126,6 +144,8 @@
       )
   register: movies_table_result
   ignore_errors: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
 
 - name: Create backend environment file
   template:
