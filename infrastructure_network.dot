@@ -1,0 +1,102 @@
+digraph G {
+    rankdir=TB;
+    node [shape=box, style=filled, fillcolor=white];
+    
+    // Internet
+    internet [label="Internet", shape=ellipse, fillcolor=lightblue];
+    
+    // Load Balancer
+    lb_ext_ip [label="Load Balancer\nExternal IP\n34.107.139.237", fillcolor=lightblue];
+    
+    // VPC Network
+    subgraph cluster_vpc {
+        label="VPC Network\nmovie-analyst-vpc-qa";
+        style=filled;
+        fillcolor=lightgray;
+        
+        // Public Subnet
+        subgraph cluster_public {
+            label="Public Subnet\n10.0.1.0/24";
+            style=dotted;
+            fillcolor=lightyellow;
+            
+            bastion_vm [label="Bastion VM\nbastion-qa\nExternal IP: 34.61.107.53\nInternal IP: 10.0.1.2", fillcolor=lightyellow];
+        }
+        
+        // Private Subnet
+        subgraph cluster_private {
+            label="Private Subnet\n10.0.2.0/24";
+            style=dotted;
+            fillcolor=lightgreen;
+            
+            backend_vm [label="Backend VM\nbackend-qa\nInternal IP: 10.0.2.2\nPorts: 3000 (API), 3306 (Proxy)", fillcolor=lightgreen];
+            frontend_vm [label="Frontend VM\nfrontend-qa-vpr8\nInternal IP: 10.0.2.3\nPort: 3030 (Web UI)", fillcolor=lightgreen];
+        }
+        
+        // Database Subnet
+        subgraph cluster_db {
+            label="Database Subnet\n10.3.30.0/24";
+            style=dotted;
+            fillcolor=lightcoral;
+            
+            cloud_sql [label="Cloud SQL Database\nmovie-db-qa\nPrivate IP: 10.3.30.5\nDatabase: movie_db", fillcolor=lightcoral];
+        }
+    }
+    
+    // Internet Gateway
+    internet_gw [label="Internet Gateway", shape=triangle, fillcolor=lightblue];
+    
+    // NAT Gateway
+    nat_gw [label="NAT Gateway", fillcolor=lightblue];
+    
+    // Router
+    router [label="Router\nrouter-default", fillcolor=lightgray];
+    
+    // Connections
+    // Internet traffic
+    internet -> internet_gw [label="Inbound Traffic"];
+    internet_gw -> lb_ext_ip [label="HTTP/S"];
+    lb_ext_ip -> frontend_vm [label="Port 3030"];
+    
+    // Internal traffic
+    frontend_vm -> backend_vm [label="API Calls\nPort 3000"];
+    backend_vm -> cloud_sql [label="Database\n(Cloud SQL Proxy)"];
+    
+    // Administration
+    bastion_vm -> backend_vm [style=dashed, label="SSH\nAdministration"];
+    bastion_vm -> frontend_vm [style=dashed, label="SSH\nAdministration"];
+    bastion_vm -> cloud_sql [style=dashed, label="SSH\nAdministration"];
+    
+    // Outbound traffic
+    backend_vm -> nat_gw [label="Outbound\n(Package Updates)"];
+    frontend_vm -> nat_gw [label="Outbound\n(Web Requests)"];
+    nat_gw -> internet_gw [label="Internet"];
+    
+    // Router connections
+    internet_gw -> router;
+    router -> nat_gw;
+    
+    // Network components
+    subgraph cluster_network {
+        label="Network Components";
+        style=solid;
+        router;
+        nat_gw;
+        internet_gw;
+    }
+    
+    // Legend
+    subgraph cluster_legend {
+        label="Legend";
+        style=solid;
+        legend_lb [shape=plaintext, label="Load Balancer"];
+        legend_vm [shape=plaintext, label="Compute VM"];
+        legend_db [shape=plaintext, label="Cloud SQL"];
+        legend_net [shape=plaintext, label="Network Component"];
+        legend_conn [shape=plaintext, label="==== Connections ===="];
+        legend_internet [shape=plaintext, label="Internet Traffic"];
+        legend_internal [shape=plaintext, label="Internal Traffic"];
+        legend_admin [shape=plaintext, label="Administration (SSH)"];
+        legend_outbound [shape=plaintext, label="Outbound Traffic"];
+    }
+}
