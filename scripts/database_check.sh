@@ -30,10 +30,8 @@ if ! command_exists gcloud; then
     exit 1
 fi
 
-if ! command_exists mysql; then
-    log "ERROR: mysql command not found. Please install MySQL client."
-    exit 1
-fi
+# Note: MySQL client is required on the target backend instance, not necessarily on the local machine
+# The actual database connectivity check will be performed via SSH on the backend instance
 
 # 1. Check if Cloud SQL Proxy on backend is running
 log "1. Checking if Cloud SQL Proxy is running on backend..."
