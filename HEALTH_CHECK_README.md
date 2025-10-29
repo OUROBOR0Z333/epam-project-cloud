@@ -6,19 +6,20 @@ This script systematically checks each layer of the Movie Analyst application in
 
 The health check script performs the following checks:
 
-1. **Load balancer ↔ Frontend VM health** - Verifies the load balancer can reach the frontend VM
-2. **Frontend process listening** - Checks if the frontend process is listening on port 3030
-3. **Backend process listening** - Checks if the backend process is listening on port 3000
-4. **PM2 status** - Verifies that both frontend and backend services are running under PM2
+1. **Cloud SQL Proxy status** - Ensures the Cloud SQL Proxy is running on the backend VM
+2. **Database connectivity** - Verifies the backend can connect to the database
+3. **Database schema verification** - Checks if database tables exist and are populated with data
+4. **Schema initialization validation** - Confirms database contains expected initial data from seeds.js
 5. **Application code verification** - Checks if application code is properly copied to instances
 6. **Dependencies verification** - Ensures Node.js dependencies are installed for both apps
-7. **Cloud SQL Proxy status** - Ensures the Cloud SQL Proxy is running on the backend VM
-8. **Database connectivity** - Verifies the backend can connect to the database
-9. **Database schema verification** - Checks if database tables exist and are populated with data
-10. **Schema initialization validation** - Confirms database contains expected initial data from seeds.js
-11. **Frontend ↔ Backend connectivity** - Tests if the frontend can reach the backend API
-12. **Load balancer accessibility** - Checks if the load balancer is responding
-13. **Backend API endpoints** - Tests if backend API endpoints are accessible through the load balancer
+7. **Backend process listening** - Checks if the backend process is listening on port 3000
+8. **Frontend process listening** - Checks if the frontend process is listening on port 3030
+9. **PM2 status for backend** - Verifies that the backend service is running under PM2
+10. **PM2 status for frontend** - Verifies that the frontend service is running under PM2
+11. **Load balancer ↔ Frontend VM health** - Verifies the load balancer can reach the frontend VM
+12. **Frontend ↔ Backend connectivity** - Tests if the frontend can reach the backend API
+13. **Load balancer accessibility** - Checks if the load balancer is responding
+14. **Backend API endpoints** - Tests if backend API endpoints are accessible through the load balancer
 
 ## Prerequisites
 
