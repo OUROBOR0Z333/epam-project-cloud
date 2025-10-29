@@ -44,7 +44,9 @@ fi
 
 # 2. Check database connectivity from backend
 log "2. Testing database connectivity from backend..."
-DB_TEST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SELECT COUNT(*) FROM movies LIMIT 1;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
+# Extract the password from the env file using more robust method to handle special characters
+DB_PASSWORD=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2-" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null | tr -d '\r\n')
+DB_TEST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p'$DB_PASSWORD' -e 'USE movie_db; SELECT COUNT(*) FROM movies LIMIT 1;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
 if echo "$DB_TEST" | grep -q "SELECT COUNT(*) FROM movies LIMIT 1" && ! echo "$DB_TEST" | grep -q "error"; then
     log "✓ Backend can connect to database"
 else
@@ -59,13 +61,13 @@ fi
 
 # 3. Check if database tables exist and are populated
 log "3. Checking if database tables exist and are populated..."
-TABLES_EXIST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SHOW TABLES;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
+TABLES_EXIST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p'$DB_PASSWORD' -e 'USE movie_db; SHOW TABLES;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
 
 if echo "$TABLES_EXIST" | grep -q "Tables_in_movie_db" && echo "$TABLES_EXIST" | grep -q -E "(movies|publications|reviewers)"; then
     log "✓ Required database tables exist"
     
     # Check if tables are populated with data
-    MOVIES_COUNT=$(echo "$TABLES_EXIST" | grep -q "movies" && gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SELECT COUNT(*) FROM movies;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "0")
+    MOVIES_COUNT=$(echo "$TABLES_EXIST" | grep -q "movies" && gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p'$DB_PASSWORD' -e 'USE movie_db; SELECT COUNT(*) FROM movies;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "0")
     
     if [ "$MOVIES_COUNT" -gt 0 ]; then
         log "✓ Database tables are populated with data (movies count: $MOVIES_COUNT)"
@@ -81,7 +83,7 @@ fi
 
 # 4. Check if the schema initialization has been run by checking for expected data
 log "4. Checking if database schema initialization has been completed properly..."
-EXPECTED_DATA_CHECK=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SELECT COUNT(*) AS total_movies FROM movies; SELECT COUNT(*) AS total_publications FROM publications; SELECT COUNT(*) AS total_reviewers FROM reviewers;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
+EXPECTED_DATA_CHECK=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p'$DB_PASSWORD' -e 'USE movie_db; SELECT COUNT(*) AS total_movies FROM movies; SELECT COUNT(*) AS total_publications FROM publications; SELECT COUNT(*) AS total_reviewers FROM reviewers;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
 
 if echo "$EXPECTED_DATA_CHECK" | grep -q -E -i "(total_movies|total_publications|total_reviewers|total)" && ! echo "$EXPECTED_DATA_CHECK" | grep -q -i "ERROR"; then
     MOVIES_COUNT=$(echo "$EXPECTED_DATA_CHECK" | grep -E "^[0-9]+$" | head -n 1)
@@ -103,7 +105,7 @@ fi
 
 # 5. Run a test query to verify the database is fully functional
 log "5. Testing database functionality with sample query..."
-SAMPLE_QUERY=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SELECT title, score FROM movies LIMIT 1;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
+SAMPLE_QUERY=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p'$DB_PASSWORD' -e 'USE movie_db; SELECT title, score FROM movies LIMIT 1;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
 
 if echo "$SAMPLE_QUERY" | grep -q "title\|score" && ! echo "$SAMPLE_QUERY" | grep -q -i "error"; then
     log "✓ Database is fully functional and accessible"
