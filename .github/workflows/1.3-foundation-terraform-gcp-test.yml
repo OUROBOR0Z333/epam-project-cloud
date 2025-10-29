@@ -1,4 +1,4 @@
-name: 1.3 Foundation - Terraform GCP Test
+name: 1.3 Foundation – Terraform GCP Test
 
 on:
   workflow_dispatch:

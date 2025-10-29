@@ -1,4 +1,4 @@
-name: 1.1 Foundation - Basic Test
+name: 1.1 Foundation – Basic Test
 
 on:
   workflow_dispatch:
