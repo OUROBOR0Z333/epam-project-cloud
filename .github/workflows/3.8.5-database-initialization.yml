@@ -89,10 +89,19 @@ jobs:
       run: |
         set -euo pipefail
         set -x
-        BACKEND_USER=$(gcloud compute os-login describe-profile \
-                         --format='value(posixAccounts.username)' \
+        # Get the OS Login profile to extract user information
+        PROFILE_OUTPUT=$(gcloud compute os-login describe-profile \
                          --impersonate-service-account="app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com")
+        echo "Profile output: $PROFILE_OUTPUT"
+        
+        # Extract the name field which contains the user ID
+        USER_ID=$(echo "$PROFILE_OUTPUT" | grep "^name:" | cut -d"'" -f2)
+        echo "User ID: $USER_ID"
+        
+        # Use the proper OS Login username format for service accounts
+        BACKEND_USER="sa_$USER_ID"
         echo "BACKEND_USER=$BACKEND_USER" >> "$GITHUB_ENV"
+        echo "Final BACKEND_USER: $BACKEND_USER"
 
     - name: Create Ansible Inventory
       run: |
