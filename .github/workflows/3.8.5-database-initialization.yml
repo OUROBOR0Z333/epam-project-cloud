@@ -120,20 +120,17 @@ jobs:
           exit 1
         fi
         
-        # Create the inventory file with IAP tunnel configuration
-        # Using printf to avoid YAML indentation issues
-        cat > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini << 'EOF'
-[backend]
-$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args='-o ProxyCommand="gcloud compute start-iap-tunnel backend-qa 22 --zone=us-central1-a --project=$PROJECT_ID --impersonate-service-account=app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --verbosity=error --listen-on-stdin" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-
-[backend:vars]
-ansible_python_interpreter=/usr/bin/python3
-db_connection_name=$DB_HOST
-db_host=127.0.0.1
-db_name=$DB_NAME
-db_user=$DB_USER
-db_password=$DB_PASSWORD
-EOF
+        # Create the inventory file with IAP tunnel configuration using echo
+        echo "[backend]" > ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        echo "$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args='-o ProxyCommand=\"gcloud compute start-iap-tunnel backend-qa 22 --zone=us-central1-a --project=$PROJECT_ID --impersonate-service-account=app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --verbosity=error --listen-on-stdin\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        echo "" >> ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        echo "[backend:vars]" >> ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        echo "ansible_python_interpreter=/usr/bin/python3" >> ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        echo "db_connection_name=$DB_HOST" >> ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        echo "db_host=127.0.0.1" >> ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        echo "db_name=$DB_NAME" >> ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        echo "db_user=$DB_USER" >> ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
+        echo "db_password=$DB_PASSWORD" >> ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
 
         echo 'Inventory generated:'
         cat ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini
