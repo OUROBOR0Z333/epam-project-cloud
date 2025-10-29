@@ -62,6 +62,12 @@
     state: present
   become_user: "{{ app_user }}"
 
+- name: Install Python MySQL client for Ansible database management
+  apt:
+    name: python3-pymysql
+    state: present
+    update_cache: yes
+
 - name: Create database schema
   mysql_db:
     login_host: "127.0.0.1"
