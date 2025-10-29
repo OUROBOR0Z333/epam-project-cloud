@@ -1,4 +1,4 @@
-name: '2.8.5 - Database Initialization'
+name: 3.8.5 Database – Schema Initialization
 
 on:
   workflow_dispatch:

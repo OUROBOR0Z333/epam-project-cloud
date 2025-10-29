@@ -1,4 +1,4 @@
-name: Complete Infrastructure Deployment with Secure Workspaces
+name: 2.2 Infrastructure – Complete Deployment Secure
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: '4.0 - Application Health Check'
+name: 4.0 Application – Health Check
 
 on:
   workflow_dispatch:  # Allows manual triggering

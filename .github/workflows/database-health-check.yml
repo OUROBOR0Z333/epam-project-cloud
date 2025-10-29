@@ -1,4 +1,4 @@
-name: Database Health Check
+name: 4.1 Database – Health Check
 
 on:
   workflow_dispatch: # Allows manual trigger

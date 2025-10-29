@@ -1,4 +1,4 @@
-name: Deploy Application
+name: 3.9 Application – Deploy to Infrastructure
 
 on:
   workflow_dispatch:

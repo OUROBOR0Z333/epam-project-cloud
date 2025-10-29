@@ -1,4 +1,4 @@
-name: Complete Infrastructure Deployment
+name: 2.2 Infrastructure – Complete Deployment
 
 on:
   workflow_dispatch:  # Allows manual triggering
