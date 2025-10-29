@@ -130,6 +130,19 @@ jobs:
             --impersonate-service-account="$APP_SA" \
             --format='table(key[:50],expirationTime)'
 
+    - name: Smoke-test SSH through IAP
+      env:
+        APP_SA_EMAIL: app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+      run: |
+        set -e
+        ssh -i /tmp/gha_key \
+          -o ProxyCommand="gcloud compute start-iap-tunnel backend-qa 22 \
+                             --zone=us-central1-a \
+                             --project=${PROJECT_ID} \
+                             --impersonate-service-account=${APP_SA_EMAIL} \
+                             --verbosity=error --listen-on-stdin" \
+          ${BACKEND_USER}@${BACKEND_IP} "echo OK"
+
     - name: Create Ansible Inventory
       run: |
         set -euo pipefail  # abort on any unset var or non-zero exit
