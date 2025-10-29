@@ -56,64 +56,43 @@ jobs:
         unset TF_WORKSPACE
         terraform workspace select -or-create=true ${{ env.TF_WORKSPACE }}
 
-    - name: Get Terraform Outputs
-      id: tf-outputs
+    - name: Terraform refresh & get outputs
       run: |
+        set -euo pipefail
         cd terraform
-        set -euo pipefail  # abort on any unset var or non-zero exit
+        terraform init -input=false
+        terraform refresh -input=false
+        terraform output -json > tfoutputs.json
         
-        # Refresh the state to ensure we have the latest outputs
-        terraform refresh
+        # Extract and export each output variable
+        DB_HOST=$(jq -r '.database_connection_name.value' tfoutputs.json)
+        DB_NAME=$(jq -r '.database_name.value' tfoutputs.json)
+        DB_USER=$(jq -r '.database_user.value' tfoutputs.json)
+        DB_PASSWORD=$(jq -r '.database_password.value' tfoutputs.json)
+        BACKEND_IP=$(jq -r '.backend_internal_ip.value' tfoutputs.json)
         
-        # Now that workspace is properly set, try to get the outputs
-        DB_HOST=$(terraform output -raw database_connection_name)
-        DB_NAME=$(terraform output -raw database_name)
-        DB_USER=$(terraform output -raw database_user)
-        DB_PASSWORD=$(terraform output -raw database_password)
-        BACKEND_IP=$(terraform output -raw backend_internal_ip)
+        # Export to environment
+        echo "DB_HOST=$DB_HOST" >> "$GITHUB_ENV"
+        echo "DB_NAME=$DB_NAME" >> "$GITHUB_ENV"
+        echo "DB_USER=$DB_USER" >> "$GITHUB_ENV"
+        echo "DB_PASSWORD=$DB_PASSWORD" >> "$GITHUB_ENV"
+        echo "BACKEND_IP=$BACKEND_IP" >> "$GITHUB_ENV"
         
-        # Write all outputs to GITHUB_OUTPUT
-        echo "db_host=$DB_HOST" >> $GITHUB_OUTPUT
-        echo "db_name=$DB_NAME" >> $GITHUB_OUTPUT
-        echo "db_user=$DB_USER" >> $GITHUB_OUTPUT
-        echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
-        echo "backend_ip=$BACKEND_IP" >> $GITHUB_OUTPUT
-        
-        # Sanity-check variables
-        for v in DB_HOST DB_NAME DB_USER DB_PASSWORD BACKEND_IP; do
-          printf '%-15s %s\n' "$v" "${!v}"
-          [ -z "${!v}" ] && { echo "::error ::$v is empty"; exit 1; }
-        done
+        # Print for visibility
+        echo "DB_HOST=$DB_HOST"
+        echo "DB_NAME=$DB_NAME"
+        echo "DB_USER=$DB_USER"
+        echo "DB_PASSWORD=<sensitive>"
+        echo "BACKEND_IP=$BACKEND_IP"
 
-    - name: Get OS Login SSH Username for Backend
-      id: backend-user
+    - name: Get OS-Login user (show full error)
       run: |
-        set -euo pipefail  # abort on any unset var or non-zero exit
-        
-        echo "Environment variable: ${{ env.TF_WORKSPACE }}"
-        echo "Project ID secret: ${{ secrets.GCP_PROJECT_ID }}"
-        SERVICE_ACCOUNT_EMAIL="app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
-        echo "Service account to impersonate: $SERVICE_ACCOUNT_EMAIL"
-        
-        # Test if service account exists first
-        if ! gcloud iam service-accounts describe "$SERVICE_ACCOUNT_EMAIL" --project="${{ secrets.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
-          echo "::error ::Service account $SERVICE_ACCOUNT_EMAIL does not exist"
-          exit 1
-        fi
-        
-        BACKEND_SSH_USER=$(gcloud compute os-login describe-profile --format="value(response.posixAccounts.username)" --impersonate-service-account="$SERVICE_ACCOUNT_EMAIL")
-        
-        # Verify the SSH user was retrieved
-        if [ -z "$BACKEND_SSH_USER" ]; then
-          echo "::error ::Failed to retrieve OS Login SSH username"
-          echo "This may indicate impersonation permissions issues"
-          exit 1
-        fi
-        
-        echo "BACKEND_USER=$BACKEND_SSH_USER" >> $GITHUB_OUTPUT
-        
-        # Confirm the value
-        echo "Retrieved SSH username: $BACKEND_SSH_USER"
+        set -euo pipefail
+        set -x
+        BACKEND_USER=$(gcloud compute os-login describe-profile \
+                         --format='value(posixAccounts.username)' \
+                         --impersonate-service-account="app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com")
+        echo "BACKEND_USER=$BACKEND_USER" >> "$GITHUB_ENV"
 
     - name: Create Ansible Inventory
       run: |
@@ -121,14 +100,7 @@ jobs:
         
         mkdir -p ansible/inventory
         
-        # Get values from previous steps
-        BACKEND_IP="${{ steps.tf-outputs.outputs.backend_ip }}"
-        BACKEND_USER="${{ steps.backend-user.outputs.BACKEND_USER }}"
-        DB_HOST="${{ steps.tf-outputs.outputs.db_host }}"
-        DB_NAME="${{ steps.tf-outputs.outputs.db_name }}"
-        DB_USER="${{ steps.tf-outputs.outputs.db_user }}"
-        DB_PASSWORD="${{ steps.tf-outputs.outputs.db_password }}"
-        
+        # Get values from environment variables
         # Check if BACKEND_USER is empty and handle appropriately
         if [ -z "$BACKEND_USER" ]; then
           echo "::error ::BACKEND_USER is empty - failed to retrieve OS Login SSH username"
@@ -167,8 +139,8 @@ jobs:
         set -euo pipefail
         ansible-playbook -i ansible/inventory/${{ env.TF_WORKSPACE }}_temp.ini ansible/playbooks/database_init.yml \
           --extra-vars "db_host=127.0.0.1" \
-          --extra-vars "db_name=${{ steps.tf-outputs.outputs.db_name }}" \
-          --extra-vars "db_user=${{ steps.tf-outputs.outputs.db_user }}" \
-          --extra-vars "db_password=${{ steps.tf-outputs.outputs.db_password }}"
+          --extra-vars "db_name=$DB_NAME" \
+          --extra-vars "db_user=$DB_USER" \
+          --extra-vars "db_password=$DB_PASSWORD"
       env:
         ANSIBLE_HOST_KEY_CHECKING: False
