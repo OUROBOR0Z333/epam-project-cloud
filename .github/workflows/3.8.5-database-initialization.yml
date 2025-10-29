@@ -141,6 +141,8 @@ jobs:
                              --project=${PROJECT_ID} \
                              --impersonate-service-account=${APP_SA_EMAIL} \
                              --verbosity=error --listen-on-stdin" \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
           ${BACKEND_USER}@${BACKEND_IP} "echo OK"
 
     - name: Create Ansible Inventory
