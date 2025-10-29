@@ -84,8 +84,8 @@ jobs:
         run: |
           cd ./terraform
           
-          # Initialize Terraform
-          terraform init -backend-config="prefix=${{ inputs.environment }}/terraform/state"
+          # Initialize Terraform with the same prefix as local configuration
+          terraform init -backend-config="prefix=terraform/state"
           
           # List existing workspaces
           echo "Current workspaces:"

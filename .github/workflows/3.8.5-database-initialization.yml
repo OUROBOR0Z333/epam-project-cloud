@@ -48,7 +48,7 @@ jobs:
         cd terraform
         terraform init \
           -backend-config="bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
-          -backend-config="prefix=terraform/state/${{ env.TF_WORKSPACE }}/terraform"
+          -backend-config="prefix=terraform/state"
 
     - name: Configure Terraform workspace
       run: |
