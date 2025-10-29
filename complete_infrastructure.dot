@@ -1,0 +1,117 @@
+digraph G {
+    rankdir=TB;
+    node [shape=box, style=filled, fillcolor=white];
+    
+    // GitHub Repository
+    repo [label="GitHub Repository\nOUROBOR0Z333/epam-project-cloud", shape=folder, fillcolor=lightblue];
+    
+    // GitHub Actions
+    actions [label="GitHub Actions\nWorkflows", fillcolor=lightyellow];
+    
+    // Terraform Local Config
+    terraform_local [label="Terraform Config\n(Local Files)", fillcolor=lightyellow];
+    
+    // Terraform Backend Config
+    backend_config [label="Terraform Backend\n(backend.tf)", fillcolor=lightyellow];
+    
+    // GCS Bucket
+    gcs_bucket [label="GCS Bucket\nepam-bucket-gcp2025\n(gs://epam-bucket-gcp2025/)", fillcolor=lightgreen];
+    
+    // Terraform State Directory
+    tf_state_dir [label="Terraform State\nDirectory\n/terraform/state/", fillcolor=lightgreen];
+    
+    // Terraform State Files
+    tf_default_state [label="default.tfstate", fillcolor=lightgreen];
+    tf_qa_state [label="qa.tfstate", fillcolor=lightgreen];
+    tf_prod_state [label="prod.tfstate", fillcolor=lightgreen];
+    
+    // GCP Platform
+    gcp [label="Google Cloud Platform\nProject: epamgcpdeployment2", shape=cloud, fillcolor=lightblue];
+    
+    // VPC Network
+    vpc [label="VPC Network\nmovie-analyst-vpc-qa", fillcolor=lightcyan];
+    
+    // Subnets
+    public_subnet [label="Public Subnet\n10.0.1.0/24", fillcolor=lightgray];
+    private_subnet [label="Private Subnet\n10.0.2.0/24", fillcolor=lightgray];
+    db_subnet [label="Database Subnet\n10.3.30.0/24", fillcolor=lightgray];
+    
+    // Bastion VM
+    bastion_vm [label="Bastion VM\nbastion-qa\n34.61.107.53\n10.0.1.2", fillcolor=lightyellow];
+    
+    // Backend VM
+    backend_vm [label="Backend VM\nbackend-qa\n10.0.2.2", fillcolor=lightyellow];
+    
+    // Frontend VM
+    frontend_vm [label="Frontend VM\nfrontend-qa-vpr8\n10.0.2.3", fillcolor=lightyellow];
+    
+    // Cloud SQL Database
+    cloud_sql [label="Cloud SQL Database\nmovie-db-qa\n10.3.30.5", fillcolor=lightcoral];
+    
+    // Load Balancer
+    load_balancer [label="Load Balancer\n34.107.139.237", fillcolor=lightblue];
+    
+    // Service Accounts
+    bastion_sa [label="Service Account\nbastion-sa-default", fillcolor=lightgray];
+    app_sa [label="Service Account\napp-sa-default", fillcolor=lightgray];
+    
+    // Ansible
+    ansible [label="Ansible\nConfiguration\nManagement", fillcolor=lightyellow];
+    
+    // Application Deployment
+    app_deployment [label="Application\nDeployment", fillcolor=orange];
+    
+    // Connections
+    repo -> actions [label="Triggers"];
+    actions -> terraform_local;
+    terraform_local -> backend_config;
+    backend_config -> gcs_bucket [label="References"];
+    gcs_bucket -> tf_state_dir;
+    tf_state_dir -> tf_default_state;
+    tf_state_dir -> tf_qa_state;
+    tf_state_dir -> tf_prod_state;
+    
+    gcs_bucket -> gcp [label="Stores State"];
+    actions -> gcp [label="Deploys"];
+    
+    gcp -> vpc;
+    vpc -> public_subnet;
+    vpc -> private_subnet;
+    vpc -> db_subnet;
+    
+    public_subnet -> bastion_vm;
+    private_subnet -> backend_vm;
+    private_subnet -> frontend_vm;
+    db_subnet -> cloud_sql;
+    
+    bastion_vm -> bastion_sa;
+    backend_vm -> app_sa;
+    frontend_vm -> app_sa;
+    
+    load_balancer -> frontend_vm [label="Routes Traffic"];
+    
+    bastion_vm -> backend_vm [style=dashed, label="SSH Access"];
+    bastion_vm -> frontend_vm [style=dashed, label="SSH Access"];
+    
+    backend_vm -> cloud_sql [label="Database\nConnection"];
+    frontend_vm -> backend_vm [label="API Calls"];
+    
+    actions -> ansible [label="Configures"];
+    ansible -> app_deployment [label="Deploys"];
+    app_deployment -> backend_vm;
+    app_deployment -> frontend_vm;
+    
+    // Legend
+    subgraph cluster_legend {
+        label="Legend";
+        style=solid;
+        legend_repo [shape=plaintext, label="Repository"];
+        legend_workflow [shape=plaintext, label="Workflow/Tool"];
+        legend_storage [shape=plaintext, label="Storage"];
+        legend_platform [shape=plaintext, label="Platform"];
+        legend_vm [shape=plaintext, label="Virtual Machine"];
+        legend_db [shape=plaintext, label="Database"];
+        legend_network [shape=plaintext, label="Network"];
+        legend_account [shape=plaintext, label="Service Account"];
+    }
+}
