@@ -1,0 +1,69 @@
+digraph G {
+    rankdir=TB;
+    node [shape=box, style=filled, fillcolor=white];
+    
+    // Internet
+    internet [label="Internet", shape=ellipse, fillcolor=lightblue];
+    
+    // Load Balancer
+    lb [label="Load Balancer\nExternal IP: 34.107.139.237", fillcolor=lightgreen];
+    
+    // Frontend VM
+    frontend [label="Frontend VM\nfrontend-qa-vpr8\n10.0.2.3 (private)\n\nNode.js App (Port 3030)", fillcolor=lightyellow];
+    
+    // Backend VM
+    backend [label="Backend VM\nbackend-qa\n10.0.2.2 (private)\n\nNode.js API (Port 3000)\nCloud SQL Proxy", fillcolor=lightyellow];
+    
+    // Database
+    database [label="Cloud SQL Database\nmovie-db-qa\n10.3.30.5 (private)\n\nTables:\n- movies\n- publications\n- reviewers", fillcolor=lightcoral];
+    
+    // Bastion
+    bastion [label="Bastion VM\nbastion-qa\nExternal IP: 34.61.107.53\nInternal IP: 10.0.1.2", fillcolor=lightgray];
+    
+    // VPC Network
+    subgraph cluster_vpc {
+        label="VPC Network: movie-analyst-vpc-qa";
+        style=dashed;
+        
+        // Public Subnet
+        subgraph cluster_public {
+            label="Public Subnet: 10.0.1.0/24";
+            style=dotted;
+            bastion;
+        }
+        
+        // Private Subnet
+        subgraph cluster_private {
+            label="Private Subnet: 10.0.2.0/24";
+            style=dotted;
+            frontend;
+            backend;
+        }
+        
+        // Database Subnet
+        subgraph cluster_db {
+            label="Database Subnet: 10.3.30.0/24";
+            style=dotted;
+            database;
+        }
+    }
+    
+    // Connections
+    internet -> lb [label="HTTP/S"];
+    lb -> frontend [label="HTTP (3030)"];
+    frontend -> backend [label="HTTP (3000)"];
+    backend -> database [label="Database (3306)"];
+    bastion -> frontend [style=dashed, label="SSH"];
+    bastion -> backend [style=dashed, label="SSH"];
+    bastion -> database [style=dashed, label="SSH"];
+    
+    // Legend
+    subgraph cluster_legend {
+        label="Legend";
+        style=solid;
+        legend_lb [shape=plaintext, label="Load Balancer"];
+        legend_vm [shape=plaintext, label="Compute VM"];
+        legend_db [shape=plaintext, label="Cloud SQL"];
+        legend_bastion [shape=plaintext, label="Bastion Host"];
+    }
+}
