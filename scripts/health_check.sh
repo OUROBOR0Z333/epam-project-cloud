@@ -165,11 +165,31 @@ fi
 
 # 8. Check database connectivity from backend
 log "8. Testing database connectivity from backend..."
-DB_TEST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SELECT COUNT(*) FROM movies LIMIT 1;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
+DB_TEST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SELECT COUNT(*) FROM movies LIMIT 1;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
 if echo "$DB_TEST" | grep -q "SELECT COUNT(*) FROM movies LIMIT 1" && ! echo "$DB_TEST" | grep -q "error"; then
     log "✓ Backend can connect to database"
 else
     log "✗ Backend cannot connect to database"
+    exit 1
+fi
+
+# 9. Check if database tables exist and are populated
+log "9. Checking if database tables exist and are populated..."
+TABLES_EXIST=$(gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SHOW TABLES;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "error")
+
+if echo "$TABLES_EXIST" | grep -q "Tables_in_movie_db" && echo "$TABLES_EXIST" | grep -q -E "(movies|publications|reviewers)"; then
+    log "✓ Required database tables exist"
+    
+    # Check if tables are populated with data
+    MOVIES_COUNT=$(echo "$TABLES_EXIST" | grep -q "movies" && gcloud compute ssh --zone=$ZONE --project=$PROJECT_ID --command="mysql -h 127.0.0.1 -u app_user -p\$(sudo grep DB_PASSWORD /opt/movie-analyst/movie-analyst-api/movie-analyst-api/.env | cut -d '=' -f 2) -e 'USE movie_db; SELECT COUNT(*) FROM movies;'" --tunnel-through-iap --ssh-flag="-o ConnectTimeout=10" $BACKEND_VM_NAME 2>/dev/null || echo "0")
+    
+    if [ "$MOVIES_COUNT" -gt 0 ]; then
+        log "✓ Database tables are populated with data (movies count: $MOVIES_COUNT)"
+    else
+        log "! Database tables exist but might be empty"
+    fi
+else
+    log "✗ Required database tables are missing"
     exit 1
 fi
 
