@@ -124,7 +124,7 @@ jobs:
         # Using printf to avoid heredoc indentation issues in YAML
         {
         echo "[backend]"
-        echo "$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args=\"-o ProxyCommand='gcloud compute start-iap-tunnel $BACKEND_IP 22 --zone=us-central1-a --project=$PROJECT_ID --impersonate-service-account=app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --verbosity=error'\""
+        echo "$BACKEND_IP ansible_user=$BACKEND_USER ansible_ssh_common_args=\"-o ProxyCommand='gcloud compute start-iap-tunnel backend-qa 22 --zone=us-central1-a --project=$PROJECT_ID --impersonate-service-account=app-sa-${{ env.TF_WORKSPACE }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com --verbosity=error --listen-on-stdin'\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
         echo ""
         echo "[backend:vars]"
         echo "ansible_python_interpreter=/usr/bin/python3"
