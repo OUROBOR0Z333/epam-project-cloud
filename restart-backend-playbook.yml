@@ -1,0 +1,46 @@
+---
+# Playbook to restart backend service after database initialization
+- name: Restart backend service
+  hosts: backend
+  become: yes
+  vars:
+    app_user: "app"
+    app_dir: "/opt/movie-analyst"
+  tasks:
+    - name: Check if PM2 process exists
+      command: pm2 describe movie-analyst-backend
+      register: pm2_backend_process_exists
+      ignore_errors: yes
+      changed_when: false
+      become_user: "{{ app_user }}"
+
+    - name: Stop backend service if it exists
+      command: pm2 stop movie-analyst-backend
+      when: pm2_backend_process_exists.rc == 0
+      become_user: "{{ app_user }}"
+
+    - name: Delete backend service if it exists
+      command: pm2 delete movie-analyst-backend
+      when: pm2_backend_process_exists.rc == 0
+      become_user: "{{ app_user }}"
+
+    - name: Start backend service with PM2
+      command: pm2 start server.js -n movie-analyst-backend --cwd {{ app_dir }}/movie-analyst-api/movie-analyst-api
+      become_user: "{{ app_user }}"
+
+    - name: Save PM2 processes
+      command: pm2 save
+      become_user: "{{ app_user }}"
+
+    - name: Ensure PM2 starts on boot
+      command: pm2 startup
+      become: yes
+      args:
+        creates: /etc/systemd/system/pm2-{{ app_user }}.service
+
+    - name: Wait for API to be available
+      wait_for:
+        host: 127.0.0.1
+        port: 3000
+        delay: 5
+        timeout: 30
